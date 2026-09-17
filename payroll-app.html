@@ -1,0 +1,2662 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#1A1D21">
+<title>Payroll Review</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<style>
+  :root{
+    --paper:#F7F7F5; --panel:#FFFFFF; --ink:#1A1D21; --slate:#5C636B;
+    --rule:#DDDEDB; --rule-strong:#C3C6C1;
+    --flag:#B4690E; --flag-bg:#FDF4E6;
+    --ok:#2F6B4F; --ok-bg:#EDF4F0;
+    --alert:#9B2C2C; --alert-bg:#FBEDED;
+    --sans:'IBM Plex Sans',system-ui,sans-serif;
+    --mono:'IBM Plex Mono',ui-monospace,monospace;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html{-webkit-tap-highlight-color:transparent}
+  body{background:var(--paper);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased}
+  button,select,input,textarea{font-family:inherit;font-size:inherit;color:inherit}
+  button{cursor:pointer}
+  :focus-visible{outline:2px solid var(--flag);outline-offset:2px}
+  .num{font-family:var(--mono);font-variant-numeric:tabular-nums}
+
+  header{border-bottom:1px solid var(--rule);background:var(--panel);position:sticky;top:0;z-index:20}
+  .head-in{max-width:1080px;margin:0 auto;padding:14px 20px;display:flex;align-items:center;gap:18px;flex-wrap:wrap}
+  .mark{font-weight:600;letter-spacing:-.01em}
+  .mark span{color:var(--slate);font-weight:400}
+  .head-sp{flex:1}
+  select.office{border:none;background:none;padding:6px 2px;font-size:15px;font-weight:500;color:var(--ink);cursor:pointer;max-width:260px}
+  select.office:disabled{opacity:1;cursor:default;appearance:none;-webkit-appearance:none}
+  #period{border:none;background:none;padding:6px 2px;width:118px;color:var(--slate)}
+  .ghost{border:1px solid var(--rule-strong);background:var(--panel);padding:7px 12px;border-radius:3px}
+  .ghost:hover{border-color:var(--ink)}
+
+  main{max-width:1080px;margin:0 auto;padding:26px 20px 90px}
+  .step{margin-bottom:34px}
+  h2{font-size:19px;font-weight:600;margin-bottom:4px;letter-spacing:-.01em}
+  .sub{color:var(--slate);font-size:14px;margin-bottom:16px;max-width:70ch}
+
+  /* upload */
+  .drop{border:1.5px dashed var(--rule-strong);border-radius:4px;background:var(--panel);padding:34px 22px;text-align:center;transition:border-color .15s,background .15s}
+  .drop.over{border-color:var(--flag);background:var(--flag-bg)}
+  .drop p{color:var(--slate);font-size:14px;margin-top:8px}
+  .primary{background:var(--ink);color:#fff;border:none;padding:11px 20px;border-radius:3px;font-weight:500}
+  .primary:hover{background:#000}
+  .primary[disabled]{opacity:.4;cursor:default}
+  .paste{width:100%;min-height:120px;border:1px solid var(--rule-strong);border-radius:3px;padding:12px;font-family:var(--mono);font-size:13px;resize:vertical;margin-top:12px}
+
+  /* ledger strip */
+  .ledger{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));border:1px solid var(--rule);background:var(--panel);border-radius:4px;overflow:hidden}
+  .cell{padding:14px 16px;border-right:1px solid var(--rule)}
+  .cell:last-child{border-right:none}
+  .cell .k{font-size:12px;color:var(--slate);margin-bottom:3px}
+  .cell .v{font-family:var(--mono);font-size:22px;font-weight:500;letter-spacing:-.02em}
+  .cell.warn .v{color:var(--flag)}
+  .cell.good .v{color:var(--ok)}
+
+  .card{border:1px solid var(--rule);border-left:3px solid var(--flag);border-radius:4px;background:var(--panel);padding:22px 24px;max-width:640px}
+  .card.hard{border-left-color:var(--alert)}
+  .card.calm{border-left-color:var(--ok)}
+  .card-top{display:flex;align-items:center;gap:14px;margin-bottom:14px}
+  .counter{font-family:var(--mono);font-size:12px;color:var(--slate);letter-spacing:.04em}
+  .sev{font-size:11.5px;font-weight:600;padding:3px 9px;border-radius:2px}
+  .sev.amber{background:var(--flag-bg);color:var(--flag)}
+  .sev.red{background:var(--alert-bg);color:var(--alert)}
+  .sev.ok{background:var(--ok-bg);color:var(--ok)}
+  .skip{margin-left:auto;background:none;border:none;color:var(--slate);font-size:13px;text-decoration:underline;padding:0}
+  .skip:hover{color:var(--ink)}
+  .q-who{font-size:21px;font-weight:600;margin-bottom:2px}
+  .q-who span{font-weight:400;color:var(--slate);font-size:15px;font-family:var(--mono)}
+  .q-what{color:var(--slate);font-size:15px;margin-bottom:16px}
+  .q-ask{font-size:16.5px;line-height:1.5;margin-bottom:18px}
+  .card .acts{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .card .acts input.note{flex:1 1 100%;min-width:0}
+  .card .acts input.explain{order:-1;margin-bottom:4px}
+  .echo{color:var(--ok);font-size:14px;font-weight:500;margin-bottom:12px}
+  @media (max-width:560px){.card{padding:18px 16px}}
+
+  /* flag queue */
+  .q{border:1px solid var(--rule);border-radius:4px;background:var(--panel);overflow:hidden}
+  .item{border-bottom:1px solid var(--rule)}
+  .item:last-child{border-bottom:none}
+  .item.resolved{background:var(--ok-bg)}
+  .row{width:100%;text-align:left;background:none;border:none;padding:14px 16px;display:flex;gap:13px;align-items:flex-start}
+  .dot{width:7px;height:7px;border-radius:50%;background:var(--flag);margin-top:7px;flex:0 0 auto}
+  .item.resolved .dot{background:var(--ok)}
+  .item.hard .dot{background:var(--alert)}
+  .row .who{font-weight:600}
+  .row .what{color:var(--slate);font-size:14px;margin-top:2px}
+  .row .when{margin-left:auto;font-family:var(--mono);font-size:13px;color:var(--slate);flex:0 0 auto}
+  .body{padding:0 16px 16px 36px;display:none}
+  .item.open .body{display:block}
+  .ask{font-size:14px;margin-bottom:12px;padding:11px 13px;background:var(--flag-bg);border-left:2px solid var(--flag);border-radius:0 3px 3px 0}
+  .item.hard .ask{background:var(--alert-bg);border-left-color:var(--alert)}
+  .acts{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .act{border:1px solid var(--rule-strong);background:var(--panel);padding:8px 13px;border-radius:3px;font-size:14px}
+  .act:hover{border-color:var(--ink)}
+  .act.pick{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .act.done{background:var(--ok);color:#fff;border-color:var(--ok)}
+  input.time{width:112px;border:1px solid var(--rule-strong);border-radius:3px;padding:8px 10px;font-family:var(--mono)}
+  input.note{flex:1;min-width:180px;border:1px solid var(--rule-strong);border-radius:3px;padding:8px 10px}
+  .outcome{margin-top:10px;font-size:13.5px;color:var(--ok);font-weight:500}
+
+  /* totals */
+  table{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--rule);border-radius:4px}
+  th,td{padding:10px 14px;text-align:left;border-bottom:1px solid var(--rule);font-size:14px}
+  th{font-weight:600;color:var(--slate);font-size:13px}
+  tr:last-child td{border-bottom:none}
+  td.n,th.n{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums}
+  tr.ot td{background:var(--flag-bg)}
+  tr.total td{font-weight:600;background:#FAFAF8}
+  .badge{display:inline-block;font-size:11.5px;padding:2px 7px;border-radius:2px;background:var(--flag-bg);color:var(--flag);margin-left:7px;font-weight:500}
+  .badge.multi{background:#EEF1F6;color:#3A4A63}
+
+  .foot{position:fixed;bottom:0;left:0;right:0;background:var(--panel);border-top:1px solid var(--rule);padding:12px 20px;display:flex;gap:12px;align-items:center;justify-content:center;flex-wrap:wrap}
+  .foot .status{color:var(--slate);font-size:14px}
+  .hide{display:none}
+  .empty{padding:26px;text-align:center;color:var(--slate);font-size:14px;background:var(--panel);border:1px solid var(--rule);border-radius:4px}
+
+  details.rules{margin-top:22px;opacity:.75;border:1px solid var(--rule);border-radius:4px;background:var(--panel)}
+  details.rules:hover{opacity:1}
+  details.rules summary{padding:11px 16px;color:var(--slate);cursor:pointer;font-size:14px;font-weight:500;list-style:none}
+  details.rules summary::-webkit-details-marker{display:none}
+  details.rules .rbody{padding:0 16px 16px;display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}
+  .fld label{display:block;font-size:13px;color:var(--slate);margin-bottom:4px}
+  .fld input,.fld select{width:100%;border:1px solid var(--rule-strong);border-radius:3px;padding:7px 9px;font-family:var(--mono);font-size:13.5px}
+  .hours-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
+
+  @media (max-width:640px){
+    .row .when{margin-left:0;width:100%}
+    .row{flex-wrap:wrap}
+    .body{padding-left:16px}
+    .hours-grid{grid-template-columns:repeat(2,1fr)}
+  }
+  @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+  @media print{
+    header,.foot,.drop,details.rules,.q{display:none}
+    body{background:#fff}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="head-in">
+    <div class="mark">Payroll</div>
+    <select class="office" id="office">
+      <option value="penn">Fort Worth Dentist</option>
+      <option value="fws">Camp Bowie Dentist</option>
+      <option value="arl">Arlington Dental Implants &amp; Cosmetic Dentistry</option>
+      <option value="__all">People at more than one office</option>
+      <option value="__staff">Staff &amp; onboarding</option>
+    </select>
+    <input class="office num" id="period" placeholder="05/10–05/22" style="border:1px solid var(--rule-strong);border-radius:3px;padding:7px 10px;width:130px">
+    <span id="sync" style="font-size:13px;color:var(--slate)"></span>
+    <div class="head-sp"></div>
+    <button class="ghost" id="reset">Start over</button>
+    <button class="ghost" id="signout">Sign out</button>
+  </div>
+</header>
+
+<main>
+
+  <div id="hire-alert" class="hide" style="max-width:1080px;margin:20px auto -8px;padding:0 20px"></div>
+
+  <section class="step hide" id="s-offices">
+    <div class="ledger" id="offices"></div>
+  </section>
+
+  <section class="step" id="s-upload">
+    <h2>Drop this period's timecards</h2>
+    <p class="sub">All of your office's punch cards at once — PDFs from the time clock, or a CSV. Nothing here changes anyone's hours; you're just telling payroll what happened.</p>
+    <div class="drop" id="drop">
+      <button class="primary" id="pick">Choose a file</button>
+      <input type="file" id="file" accept=".csv,.xlsx,.xls,.tsv,.txt,.pdf" multiple class="hide">
+      <p>or drag them here — time-clock PDFs, CSV or Excel. Several files at once is fine.</p>
+      <textarea class="paste" id="paste" placeholder="Or paste rows here:&#10;Beth Casas	05/12	6:33 AM	3:02 PM&#10;Beth Casas	05/13	6:41 AM	4:15 PM"></textarea>
+      <div style="margin-top:12px"><button class="primary" id="usePaste">Use pasted rows</button></div>
+      <p id="drop-status" style="margin-top:12px;font-size:14px;min-height:1.3em"></p>
+    </div>
+
+    <div id="assign" class="hide" style="margin-top:16px;border:1px solid var(--flag);background:var(--flag-bg);border-radius:4px;padding:16px">
+      <div style="font-weight:600;margin-bottom:4px">Confirm who each timecard belongs to</div>
+      <p style="color:var(--slate);font-size:13.5px;margin-bottom:12px">The name shown is read off the timecard itself. Check it matches the person selected, then confirm. Suggestions are only guesses until you confirm them.</p>
+      <div id="assign-list"></div>
+      <button class="primary" id="assign-done" style="margin-top:14px">These are right — continue</button>
+    </div>
+
+    <details class="rules">
+      <summary>Office rules</summary>
+      <div class="rbody">
+        <div class="fld">
+          <label for="r-round">Rounding</label>
+          <select id="r-round">
+            <option value="down">Down to quarter hour</option>
+            <option value="near">Nearest quarter hour</option>
+            <option value="none">Exact minutes</option>
+          </select>
+        </div>
+        <div class="fld">
+          <label for="r-ot">Overtime after (hrs/week)</label>
+          <input id="r-ot" value="40" class="num">
+        </div>
+        <div class="fld">
+          <label for="r-long">Flag shifts longer than (hrs)</label>
+          <input id="r-long" value="10" class="num">
+        </div>
+        <div class="fld">
+          <label for="r-early">Flag clock-ins before</label>
+          <input id="r-early" value="7:00 AM" class="num">
+        </div>
+        <div class="fld" style="grid-column:1/-1">
+          <label>Office closes at</label>
+          <div class="hours-grid">
+            <input id="c-1" value="5:00 PM" class="num" aria-label="Monday close">
+            <input id="c-2" value="5:00 PM" class="num" aria-label="Tuesday close">
+            <input id="c-3" value="5:00 PM" class="num" aria-label="Wednesday close">
+            <input id="c-4" value="3:00 PM" class="num" aria-label="Thursday close">
+            <input id="c-5" value="1:00 PM" class="num" aria-label="Friday close">
+          </div>
+          <p style="font-size:12.5px;color:var(--slate);margin-top:6px">Mon · Tue · Wed · Thu · Fri — a punch-out after close is treated as a likely clock error.</p>
+        </div>
+        <div class="fld" style="grid-column:1/-1">
+          <label for="r-holiday">Paid holidays in this period (date and hours, e.g. 09/07 8)</label>
+          <input id="r-holiday" placeholder="09/07 8" class="num">
+          <p style="font-size:12.5px;color:var(--slate);margin-top:6px">Holiday and vacation hours are paid but don't count toward overtime — they're kept in a separate column, the way Paychex expects them.</p>
+        </div>
+        <div class="fld" style="grid-column:1/-1">
+          <label for="r-expect">Expected this period (one name per line — anyone missing gets flagged)</label>
+          <textarea id="r-expect" class="paste" style="min-height:70px;font-size:13px" placeholder="Beth Casas&#10;Diana Do&#10;Ralanda Middlebrooks"></textarea>
+        </div>
+      </div>
+    </details>
+  </section>
+
+  <p class="hide" id="ledger-line" style="max-width:1080px;margin:0 auto;padding:0 20px 8px;color:var(--slate);font-size:14px"></p>
+
+  <div id="roster-check" class="hide" style="max-width:640px;margin:0 auto 20px"></div>
+  <div id="period-status" class="hide" style="max-width:1080px;margin:0 auto 18px;padding:0 20px"></div>
+
+  <section class="step hide" id="s-flags">
+    <div id="queue"></div>
+    <p id="q-done" class="hide" style="color:var(--ok);font-size:15px;font-weight:500"></p>
+  </section>
+
+  <section class="step hide" id="s-staff">
+    <h2 id="staff-h">Staff</h2>
+    <p class="sub" id="staff-sub">Who works where, what they're paid, and where new hires stand.</p>
+
+    <label id="staff-all-wrap" style="display:none;align-items:center;gap:7px;font-size:13.5px;color:var(--slate);margin-bottom:10px">
+      <input type="checkbox" id="staff-all" checked> Show every office
+    </label>
+    <div style="overflow-x:auto;margin-bottom:22px"><table id="staff-table"></table></div>
+
+    <div style="border:1px solid var(--rule);border-radius:4px;background:var(--panel);padding:16px 18px">
+      <div style="font-weight:600;margin-bottom:4px">New hire — send to the owner for Paychex</div>
+      <p style="color:var(--slate);font-size:13.5px;margin-bottom:12px">Enter this once and the owner gets everything needed to create the Paychex record and send the invite — no texting rates back and forth. Pay details are visible to the owner only. The new hire's Social Security number, date of birth, home address and bank details are never entered here; they type those into Paychex themselves.</p>
+      <div style="display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(150px,1fr))">
+        <div class="fld"><label for="n-first">Legal first name</label><input id="n-first" placeholder="Jennifer"></div>
+        <div class="fld"><label for="n-last">Legal last name</label><input id="n-last" placeholder="Ho-Martinez"></div>
+        <div class="fld"><label for="n-email">Personal email — the invite goes here</label><input id="n-email" type="email" placeholder="jennifer@email.com" autocomplete="off"></div>
+        <div class="fld"><label for="n-phone">Mobile</label><input id="n-phone" type="tel" class="num" placeholder="(817) 555-0100" autocomplete="off"></div>
+        <div class="fld"><label for="n-office">Office / entity</label><select id="n-office"></select></div>
+        <div class="fld"><label for="n-role">Job title</label><input id="n-role" placeholder="Dental Hygienist"></div>
+        <div class="fld"><label for="n-status">Status</label><select id="n-status"><option>Full time</option><option>Part time</option><option>PRN</option></select></div>
+        <div class="fld"><label for="n-type">Paid as</label><select id="n-type"><option>Hourly</option><option>Salary</option></select></div>
+        <div class="fld"><label for="n-rate">Rate</label><input id="n-rate" class="num" placeholder="26.00"></div>
+        <div class="fld"><label for="n-ot">Overtime rate</label><input id="n-ot" class="num" placeholder="39.00"></div>
+        <div class="fld"><label for="n-start">First day</label><input id="n-start" class="num" placeholder="09/29/26"></div>
+        <div class="fld"><label for="n-mgr">Reports to</label><input id="n-mgr" placeholder="Office manager"></div>
+        <div class="fld" id="fld-pid"><label for="n-pid">Paychex employee ID</label><input id="n-pid" class="num" placeholder="51"></div>
+        <div class="fld" id="fld-tc"><label for="n-tc">Timecard each period?</label>
+          <select id="n-tc">
+            <option value="yes">Yes — chase it if missing</option>
+            <option value="occasional">Only sometimes — covers here now and then</option>
+            <option value="no">Never — salaried or on call</option>
+          </select></div>
+        <div class="fld" id="fld-paid"><label for="n-paid">Paid by</label><select id="n-paid"></select></div>
+      </div>
+      <input type="hidden" id="n-id">
+      <div style="margin-top:12px;display:flex;gap:9px;flex-wrap:wrap">
+        <button class="primary" id="n-add">Send to owner</button>
+        <button class="ghost" id="n-copy">Copy details for Paychex</button>
+      </div>
+      <p id="n-msg" style="margin-top:9px;font-size:13.5px;color:var(--ok)"></p>
+    </div>
+
+    <div id="owner-queue" class="hide" style="border:1px solid var(--flag);border-radius:4px;background:var(--flag-bg);padding:16px 18px;margin-top:18px"></div>
+
+    <div style="border:1px solid var(--rule);border-radius:4px;background:var(--panel);padding:16px 18px;margin-top:18px">
+      <div style="font-weight:600;margin-bottom:4px">What a new hire needs before their first payroll</div>
+      <p style="color:var(--slate);font-size:13.5px;margin-bottom:12px">Social Security number, home address, date of birth and direct deposit details go straight into Paychex through their own onboarding link — the new hire types them in, and they never pass through this page or anyone's inbox. Track the rest here.</p>
+      <div id="onboard-list"></div>
+    </div>
+  </section>
+
+  <section class="step hide" id="s-combined">
+    <h2>People working more than one office</h2>
+    <p class="sub">Anyone working more than one location this period. Each office is its own legal entity and files its own payroll, so these hours are entered separately and overtime is assessed at each office on its own.</p>
+    <div id="combined"></div>
+  </section>
+
+  <section class="step hide" id="s-totals">
+    <h2 id="totals-h">Hours for Paychex</h2>
+    <p class="sub" id="totals-sub"></p>
+    <div style="overflow-x:auto"><table id="totals"></table></div>
+    <div id="owner-other" style="margin-top:16px;border:1px solid var(--rule);border-radius:4px;background:var(--panel);padding:14px 16px">
+      <div style="font-weight:600;margin-bottom:4px">Add paid time that isn't worked</div>
+      <p style="color:var(--slate);font-size:13.5px;margin-bottom:10px">Holiday, vacation, sick and personal hours are paid but stay out of the overtime math — Paychex wants them on their own lines.</p>
+      <div class="acts">
+        <select id="o-emp" style="border:1px solid var(--rule-strong);border-radius:3px;padding:8px 10px"></select>
+        <select id="o-kind" style="border:1px solid var(--rule-strong);border-radius:3px;padding:8px 10px">
+          <option value="Holiday">Holiday</option>
+          <option value="Vacation">Vacation</option>
+          <option value="Sick">Sick</option>
+          <option value="Personal">Personal</option>
+          <option value="Bonus">Bonus ($)</option>
+        </select>
+        <input id="o-hrs" class="time num" placeholder="8">
+        <button class="act pick" id="o-add">Add</button>
+      </div>
+    </div>
+    <div id="proposals"></div>
+    <div id="reported"></div>
+    <div id="multi-note" style="margin-top:12px"></div>
+  </section>
+
+</main>
+
+<div class="foot hide" id="foot">
+  <span class="status" id="status"></span>
+  <button class="ghost" id="copy">Copy summary</button>
+  <button class="ghost" id="csv">Download CSV</button>
+  <button class="primary" id="approve">Approve period</button>
+</div>
+
+<script>
+(function(){
+  "use strict";
+  var $ = function(s){ return document.querySelector(s); };
+  function show(sel){ var el = $(sel); if (el) el.classList.remove("hide"); }
+  function hide(sel){ var el = $(sel); if (el) el.classList.add("hide"); }
+  var rows = [];        // {emp, date, inT, outT, mins, day}
+  var flags = [];
+  var adjust = {};      // key -> {mins, label, note}
+  var excluded = {};
+  var extras = [];      // manual additions e.g. PTO
+
+  /* ---------- parsing helpers ---------- */
+  function norm(s){ return String(s == null ? "" : s).trim(); }
+  function lower(s){ return norm(s).toLowerCase(); }
+
+  function parseTime(v){
+    if (v == null || v === "") return null;
+    if (typeof v === "number" && v > 0 && v < 1) return Math.round(v * 24 * 60); // excel fraction
+    var s = norm(v).toUpperCase().replace(/\./g,"");
+    var m = s.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)?$/);
+    if (!m) {
+      var m2 = s.match(/^(\d{1,2})(\d{2})\s*(AM|PM)?$/);
+      if (!m2) return null;
+      m = [null, m2[1], m2[2], m2[3]];
+    }
+    var h = parseInt(m[1],10), mi = parseInt(m[2],10), ap = m[3];
+    if (ap === "PM" && h !== 12) h += 12;
+    if (ap === "AM" && h === 12) h = 0;
+    if (h > 23 || mi > 59) return null;
+    return h*60 + mi;
+  }
+  function fmtTime(mins){
+    if (mins == null) return "—";
+    var h = Math.floor(mins/60), m = mins%60, ap = h >= 12 ? "PM" : "AM";
+    var hh = h % 12; if (hh === 0) hh = 12;
+    return hh + ":" + String(m).padStart(2,"0") + " " + ap;
+  }
+  function fmtHM(mins){
+    if (mins == null) return "—";
+    var neg = mins < 0; mins = Math.abs(mins);
+    return (neg?"-":"") + Math.floor(mins/60) + ":" + String(mins%60).padStart(2,"0");
+  }
+  function parseDate(v){
+    if (v instanceof Date) return v;
+    if (typeof v === "number" && v > 20000 && v < 60000){
+      return new Date(Date.UTC(1899,11,30) .getTime() + v*86400000);
+    }
+    var s = norm(v);
+    var m = s.match(/^(\d{1,2})[\/\-](\d{1,2})(?:[\/\-](\d{2,4}))?$/);
+    if (m){
+      var y = m[3] ? (m[3].length === 2 ? 2000 + parseInt(m[3],10) : parseInt(m[3],10)) : new Date().getFullYear();
+      return new Date(y, parseInt(m[1],10)-1, parseInt(m[2],10));
+    }
+    var d = new Date(s);
+    return isNaN(d.getTime()) ? null : d;
+  }
+  var DAYS = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+  function dstr(d){ return d ? (d.getMonth()+1) + "/" + String(d.getDate()).padStart(2,"0") : "—"; }
+
+  function detect(headers){
+    var map = {};
+    headers.forEach(function(h,i){
+      var k = lower(h);
+      if (map.emp == null && /(employee|name|staff|worker|person)/.test(k)) map.emp = i;
+      else if (map.date == null && /(date|day|work ?date)/.test(k)) map.date = i;
+      else if (map.inT == null && /(in\b|clock ?in|start|time in|punch in)/.test(k)) map.inT = i;
+      else if (map.outT == null && /(out\b|clock ?out|end|time out|punch out)/.test(k)) map.outT = i;
+      else if (map.hrs == null && /(hours|total|duration|hrs)/.test(k)) map.hrs = i;
+    });
+    return map;
+  }
+
+  function ingest(matrix){
+    if (!matrix.length) return alert("That file came through empty — check the export and try again.");
+    var head = matrix[0].map(norm);
+    var map = detect(head);
+    var start = 1;
+    if (map.emp == null || map.date == null){
+      // headerless: assume emp, date, in, out
+      map = {emp:0, date:1, inT:2, outT:3};
+      start = 0;
+    }
+    var out = [];
+    for (var i = start; i < matrix.length; i++){
+      var r = matrix[i]; if (!r) continue;
+      var emp = norm(r[map.emp]);
+      if (!emp) continue;
+      var d = parseDate(r[map.date]);
+      var ti = map.inT != null ? parseTime(r[map.inT]) : null;
+      var to = map.outT != null ? parseTime(r[map.outT]) : null;
+      var mins = null;
+      if (ti != null && to != null) mins = to >= ti ? to - ti : (to + 1440) - ti;
+      else if (map.hrs != null){
+        var hv = norm(r[map.hrs]);
+        if (/:/.test(hv)){ var p = hv.split(":"); mins = parseInt(p[0],10)*60 + parseInt(p[1],10); }
+        else if (hv !== "" && !isNaN(parseFloat(hv))) mins = Math.round(parseFloat(hv)*60);
+      }
+      out.push({ emp: emp, date: d, day: d ? DAYS[d.getDay()] : "", inT: ti, outT: to, mins: mins, office: $("#office").value, key: emp + "|" + dstr(d) + "|" + i });
+    }
+    if (!out.length) return alert("No rows with an employee name were found. Check the columns and try again.");
+    rows = out;
+    build();
+  }
+
+  var PDF_ROW = /^(\d{2}\/\d{2}\/\d{4})$/;
+  var PDF_DAY = /^(Mon|Tue|Wed|Thu|Fri|Sat|Sun)$/;
+  var PDF_TIME = /^\d{1,2}:\d{2}\s*(AM|PM)$/i;
+  var PDF_DUR  = /^\d{1,3}:\d{2}$/;
+  var pendingSheets = [];
+
+  function parsePdfPage(tokens){
+    // tokens: ordered text items for one page (one employee)
+    var out = [], cur = null;
+    for (var i = 0; i < tokens.length; i++){
+      var t = tokens[i].trim();
+      if (!t) continue;
+      if (PDF_ROW.test(t)){
+        if (cur) out.push(cur);
+        cur = { date: t, day:"", punches:[], durs:[], adjust:null, note:"" };
+        continue;
+      }
+      if (!cur) continue;
+      if (PDF_DAY.test(t)){ cur.day = t; continue; }
+      if (/^\(Adjust\)$/i.test(t)){ cur.isAdjust = true; continue; }
+      if (PDF_TIME.test(t)){ cur.punches.push(t); continue; }
+      if (PDF_DUR.test(t)){ cur.durs.push(t); continue; }
+      // anything else is a note fragment
+      if (t.length > 1 && !/^\d+$/.test(t)) cur.note = (cur.note ? cur.note + " " : "") + t;
+    }
+    if (cur) out.push(cur);
+    return out;
+  }
+
+  function hmToMins(hm){
+    var p = hm.split(":");
+    return parseInt(p[0],10)*60 + parseInt(p[1],10);
+  }
+
+  function sheetToRows(name, parsed){
+    var rws = [];
+    parsed.forEach(function(r, idx){
+      var d = parseDate(r.date);
+      var key = name + "|" + dstr(d) + "|" + idx;
+      if (r.isAdjust){
+        // On the last row of a week the clock also prints the WEEK total in the
+        // same line. Anything longer than a single shift can't be one day's
+        // credit, so ignore those and take the smallest plausible figure.
+        var DAY_CAP = 16 * 60;
+        var cand = r.durs.map(hmToMins).filter(function(m){ return m > 0 && m <= DAY_CAP; });
+        var mins = cand.length ? Math.min.apply(null, cand) : null;
+
+        var kind = /pto/i.test(r.note) ? "PTO"
+                 : /holiday/i.test(r.note) ? "Holiday"
+                 : /vacat/i.test(r.note) ? "Vacation"
+                 : /sick/i.test(r.note) ? "Sick"
+                 : /personal/i.test(r.note) ? "Personal" : null;
+
+        if (mins == null){
+          // nothing on this line reads as a day's hours — ask rather than invent
+          rws.push({ emp:name, date:d, day: d?DAYS[d.getDay()]:"", inT:null, outT:null,
+                     mins:null, key:key, unreadable:true, note:r.note });
+        } else if (kind){
+          extras.push({ emp:name, mins:mins, kind:kind, label:(mins/60).toFixed(2)+" "+kind.toLowerCase(), noWork:true });
+        } else {
+          // an adjustment with a free-text reason: category unknown, so ask
+          rws.push({ emp:name, date:d, day: d?DAYS[d.getDay()]:"", inT:null, outT:null,
+                     mins:mins, key:key, unlabeled:true, note:r.note });
+        }
+        return;
+      }
+      // Punches come in in/out pairs; a day can have two pairs (lunch split).
+      // The clock prints each pair's own duration and truncates seconds, so its
+      // figure is the authority — recomputing from the printed times runs a
+      // minute high on every shift. Fall back to arithmetic only if the
+      // printed figure is missing or disagrees wildly.
+      var pairCount = Math.floor(r.punches.length / 2);
+      function pairMins(idx, a, b){
+        var calc = (b >= a ? b - a : (b + 1440) - a);
+        if (idx < r.durs.length){
+          var printed = hmToMins(r.durs[idx]);
+          if (printed > 0 && printed <= 16*60 && Math.abs(printed - calc) <= 5) return printed;
+        }
+        return calc;
+      }
+      var punchMins = 0;
+      for (var q = 0; q + 1 < r.punches.length; q += 2){
+        var a = parseTime(r.punches[q]), b = parseTime(r.punches[q+1]);
+        if (a != null && b != null) punchMins += pairMins(q/2, a, b);
+      }
+      // Work out which printed figure is the DAY total. The clock lays the line
+      // out as: one duration per punch pair, then any adjustment, then the day,
+      // then the week total on the last day of a week. Knowing the pair count
+      // makes the position certain — guessing by size gets it wrong when a
+      // part-timer's week total is itself under a day's length.
+      var dayTotal = 0;
+      var dnums = r.durs.map(hmToMins);
+      if (pairCount >= 2){
+        dayTotal = dnums.length > pairCount ? dnums[pairCount] : punchMins;
+      } else if (pairCount === 1){
+        if (dnums.length === 1) dayTotal = dnums[0];
+        else if (dnums[1] === dnums[0]) dayTotal = dnums[1];   // no adjustment; [2] is the week
+        else dayTotal = dnums.length > 2 ? dnums[2] : dnums[1]; // [1] is an adjustment
+      }
+      if (!(dayTotal > 0) || dayTotal > 16 * 60) dayTotal = punchMins;
+      var spare = 0;
+      if (punchMins > 0 && dayTotal > punchMins){
+        var diff = dayTotal - punchMins;
+        // a minute or two is the clock's own second-rounding, not extra time
+        if (diff <= 5) spare = diff;
+        else {
+          rws.push({ emp:name, date:d, day: d?DAYS[d.getDay()]:"", inT:null, outT:null,
+                     mins: diff, key: key + "|adj", unlabeled:true, note:r.note });
+        }
+      }
+      var lastPairIdx = (pairCount - 1) * 2;
+      for (var p = 0; p + 1 < r.punches.length; p += 2){
+        var ti = parseTime(r.punches[p]), to = parseTime(r.punches[p+1]);
+        if (ti == null || to == null) continue;
+        var m = pairMins(p/2, ti, to);
+        if (p === lastPairIdx) m += spare;          // make the day match the clock
+        rws.push({ emp:name, date:d, day: d?DAYS[d.getDay()]:"",
+                   inT:ti, outT:to, mins: m,
+                   key: key + "|" + p, note:r.note });
+      }
+      if (r.punches.length === 1){
+        var only = parseTime(r.punches[0]);
+        rws.push({ emp:name, date:d, day: d?DAYS[d.getDay()]:"", inT:only, outT:null, mins:null, key:key, note:r.note });
+      }
+    });
+    return rws;
+  }
+
+  function guessName(filename){
+    var base = filename.replace(/\.pdf$/i,"").replace(/[_\-]+/g," ");
+    base = base.replace(/\d{1,2}[\s\-\/]\d{1,2}([\s\-\/]\d{2,4})?/g," ");
+    base = base.replace(/payroll|timesheet|week ending|only|that was not paid.*/ig," ");
+    return base.replace(/\s+/g," ").trim();
+  }
+
+  function say(msg, bad){
+    var el = $("#drop-status");
+    if (el){ el.textContent = msg || ""; el.style.color = bad ? "var(--alert)" : "var(--slate)"; }
+  }
+
+  /** The employee's name is drawn as vector art, so no parser can read it —
+   *  but a person can. Render the strip where the clock prints it and show
+   *  that picture beside the suggested name. A rendered name is real
+   *  evidence; a filename or a page position is a guess. */
+  function renderNameStrip(page){
+    try {
+      var vp = page.getViewport({ scale: 1 });
+      var scale = Math.min(2.4, 760 / vp.width);
+      var full = page.getViewport({ scale: scale });
+      var stripTop = Math.round(full.height * 0.055);
+      var stripH   = Math.round(full.height * 0.045);
+      var canvas = document.createElement("canvas");
+      canvas.width = Math.round(full.width * 0.55);
+      canvas.height = stripH;
+      var ctx = canvas.getContext("2d");
+      ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.translate(0, -stripTop);
+      return page.render({ canvasContext: ctx, viewport: full }).promise
+        .then(function(){ return canvas.toDataURL("image/png"); })
+        .catch(function(){ return ""; });
+    } catch(e){ return Promise.resolve(""); }
+  }
+
+  function readPdf(f){
+    if (typeof pdfjsLib === "undefined"){
+      say("Couldn't load the PDF reader. Check your connection and reload, or paste the rows in the box above.", true);
+      return;
+    }
+    say("Reading " + f.name + "…");
+    var fr = new FileReader();
+    fr.onerror = function(){ say("Couldn't open " + f.name + ".", true); };
+    fr.onload = function(e){
+      try {
+        pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+      } catch(err){}
+      pdfjsLib.getDocument({ data: e.target.result }).promise.then(function(pdf){
+        var jobs = [];
+        for (var p = 1; p <= pdf.numPages; p++){
+          jobs.push(pdf.getPage(p).then(function(pg){
+            return Promise.all([pg.getTextContent(), renderNameStrip(pg)])
+              .then(function(both){ return { text: both[0], strip: both[1] }; });
+          }));
+        }
+        Promise.all(jobs).then(function(pages){
+          var guess = guessName(f.name);
+          var got = 0;
+          pages.forEach(function(pageData, i){
+            var tc = pageData.text;
+            var toks = tc.items.map(function(it){ return it.str; });
+            var parsed = parsePdfPage(toks);
+            if (!parsed.length) return;
+            got++;
+            // a full-content signature, so a CORRECTED card is never mistaken
+            // for a duplicate: same days and same first punch but a different
+            // finish time is a different signature.
+            var sig = parsed.map(function(x){
+              return x.date + "~" + (x.punches||[]).join(",") + "~" +
+                     (x.durs||[]).join(",") + "~" + (x.note||"");
+            }).join("|");
+            if (pendingSheets.some(function(o){ return o.sig === sig; })){ return; }
+            pendingSheets.push({
+              sig: sig,
+              strip: pageData.strip || "",
+              file: f.name,
+              fromMultiPage: pages.length > 1,
+              file: f.name,
+              suggested: (pages.length === 1 ? guess : ""),
+              parsed: parsed,
+              preview: parsed.slice(0,3).map(function(r){
+                return dstr(parseDate(r.date)) + " " + (r.punches.length ? r.punches.join(" – ") : "(adjust) " + (r.durs[0]||"")) ;
+              }).join(" · ")
+            });
+          });
+          if (!got){
+            say("Nothing readable in " + f.name + " — it may be a scan rather than a real export. " +
+                "A CSV from the time clock always works.", true);
+            return;
+          }
+          say(pendingSheets.length + (pendingSheets.length === 1 ? " timecard read." : " timecards read."));
+          showAssign();
+        }).catch(function(err){ say("Couldn't read the pages in " + f.name + ". " + err, true); });
+      }).catch(function(err){ say("Couldn't open " + f.name + " as a PDF. " + err, true); });
+    };
+    fr.readAsArrayBuffer(f);
+  }
+
+  /** Filenames carry a first name, a last name, or a nickname — rarely the
+   *  full roster spelling. Match on any whole word they share. */
+  function matchRoster(guess, roster){
+    if (!guess) return "";
+    var g = lower(guess).replace(/[^a-z\s]/g, " ").split(/\s+/).filter(Boolean);
+    if (!g.length) return "";
+    var best = "", bestScore = 0;
+    roster.forEach(function(n){
+      var parts = lower(n).replace(/[^a-z\s]/g, " ").split(/\s+/).filter(Boolean);
+      var score = 0;
+      g.forEach(function(w){
+        if (w.length < 3) return;
+        parts.forEach(function(p){
+          if (p === w) score += 3;                       // whole name matches
+          else if (p.length > 3 && (p.indexOf(w) === 0 || w.indexOf(p) === 0)) score += 2;  // Lali / Lalita
+        });
+      });
+      if (score > bestScore){ bestScore = score; best = n; }
+    });
+    return bestScore >= 2 ? best : "";
+  }
+
+  function lastName(n){
+    var parts = String(n||"").trim().split(/\s+/);
+    return (parts[parts.length-1] || "").toLowerCase();
+  }
+
+  /** The clock prints pages alphabetically by surname, which makes a decent
+   *  SUGGESTION — but never evidence. One missing page shifts every match
+   *  after it, so nothing loads until a person has confirmed the rendered
+   *  name against the person selected. */
+  function guessByOrder(sheets){
+    var office = $("#office").value;
+    var expected = staff
+      .filter(function(p){
+        return p.office === office && String(p.timecard || "yes") !== "no" &&
+               !/^Left /.test(String(p.status || ""));
+      })
+      .map(function(p){ return p.name; })
+      .sort(function(a,b){ return lastName(a).localeCompare(lastName(b)); });
+
+    var multi = sheets.filter(function(sh){ return sh.fromMultiPage; });
+    if (!multi.length || !expected.length) return;
+
+    // pages already named from their filename shouldn't be overwritten
+    multi.forEach(function(sh, i){
+      if (sh.suggested) return;
+      if (expected[i]) { sh.suggested = expected[i]; sh.guessed = true; }
+    });
+  }
+
+  function showAssign(){
+    if (!pendingSheets.length) return;
+    var R = rules();
+    guessByOrder(pendingSheets);
+    var office0 = $("#office").value;
+    var roster = staff
+      .filter(function(p){ return p.office === office0 && !/^Left /.test(String(p.status||"")); })
+      .map(function(p){ return p.name; })
+      .concat(R.expect)
+      .filter(function(v,i,a){ return v && a.indexOf(v) === i; })
+      .sort(function(a,b){ return lastName(a).localeCompare(lastName(b)); });
+    // resolve filename guesses against the real roster before drawing the list
+    pendingSheets.forEach(function(sh){
+      if (!sh.suggested) return;
+      var hit = matchRoster(sh.suggested, roster);
+      if (hit){ sh.suggested = hit; sh.guessed = true; }
+    });
+
+    var box = $("#assign-list");
+    box.innerHTML = pendingSheets.map(function(sh, i){
+      var opts = '<option value="">Who is this?</option>' +
+        roster.map(function(n){ return '<option'+(sh.suggested && lower(n)===lower(sh.suggested) ? " selected":"")+'>'+esc(n)+'</option>'; }).join("");
+      return '<div class="assign-row" style="padding:12px 0;border-bottom:1px solid var(--rule)">'+
+        (sh.strip
+          ? '<img src="'+sh.strip+'" alt="name printed on this timecard" ' +
+            'style="display:block;max-width:100%;height:auto;border:1px solid var(--rule);border-radius:3px;background:#fff;margin-bottom:8px">'
+          : '<div style="font-size:13px;color:var(--alert);margin-bottom:8px">Couldn\'t show the printed name for this one — check the punches below carefully.</div>')+
+        '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">'+
+          '<label style="display:flex;align-items:center;gap:7px;font-size:14px;font-weight:500">'+
+            '<input type="checkbox" class="assign-ok" data-i="'+i+'"'+(sh.confirmed ? " checked" : "")+'> matches</label>'+
+          '<select data-i="'+i+'" class="assign-sel" style="border:1px solid '+(sh.confirmed ? "var(--rule-strong)" : "var(--flag)")+';border-radius:3px;padding:8px 10px;min-width:210px;font-weight:500">'+opts+'</select>'+
+          '<input class="assign-name'+(roster.length ? " hide" : "")+'" data-i="'+i+'" placeholder="Type the name" value="'+esc(sh.suggested||"")+'" style="border:1px solid var(--rule-strong);border-radius:3px;padding:8px 10px">'+
+          '<span style="font-family:var(--mono);font-size:12.5px;color:var(--slate);flex:1 1 220px">'+esc(sh.preview)+'</span>'+
+          '<span style="font-size:12px;color:var(--slate)">'+esc(sh.file || "")+'</span>'+
+        '</div></div>';
+    }).join("");
+    box.querySelectorAll(".assign-ok").forEach(function(cb){
+      cb.addEventListener("change", function(){
+        var i = parseInt(cb.getAttribute("data-i"), 10);
+        if (pendingSheets[i]) pendingSheets[i].confirmed = cb.checked;
+        var sel = box.querySelectorAll(".assign-sel")[i];
+        if (sel) sel.style.borderColor = cb.checked ? "var(--rule-strong)" : "var(--flag)";
+        say("");
+      });
+    });
+    box.querySelectorAll(".assign-sel").forEach(function(sel){
+      sel.addEventListener("change", function(){
+        // changing the person un-confirms it — the tick meant "this pairing"
+        var i = parseInt(sel.getAttribute("data-i"), 10);
+        var cb = box.querySelectorAll(".assign-ok")[i];
+        if (cb){ cb.checked = false; sel.style.borderColor = "var(--flag)"; }
+        if (pendingSheets[i]) pendingSheets[i].confirmed = false;
+      });
+    });
+    $("#assign").classList.remove("hide");
+  }
+
+  $("#assign-done") && $("#assign-done").addEventListener("click", function(){
+    var sels = document.querySelectorAll(".assign-sel");
+    var names = document.querySelectorAll(".assign-name");
+    var oks = document.querySelectorAll(".assign-ok");
+    var unconfirmed = [];
+    pendingSheets.forEach(function(sh, i){
+      if (!(oks[i] && oks[i].checked)) unconfirmed.push(i + 1);
+    });
+    if (unconfirmed.length){
+      say("Tick \u201cmatches\u201d on every timecard once you've checked the printed name against the person selected. " +
+          "Still to confirm: " + unconfirmed.length + ".", true);
+      return;
+    }
+    var added = [], seen = {}, replacing = [];
+    pendingSheets.forEach(function(sh, i){
+      var n = (sels[i] && sels[i].value) || (names[i] && names[i].value.trim());
+      if (!n) return;
+      if (seen[sh.sig]){ note(n, "the same file was added twice — one copy used"); return; }
+      seen[sh.sig] = true;
+      var off = $("#office").value;
+      var fresh = sheetToRows(n, sh.parsed).map(function(r){ r.office = off; return r; });
+
+      // Does this person already have days loaded that overlap these?
+      var haveDays = {};
+      rows.forEach(function(r){ if (r.emp === n) haveDays[dstr(r.date)] = true; });
+      var overlap = fresh.filter(function(r){ return haveDays[dstr(r.date)]; });
+
+      if (overlap.length){
+        var oldMins = rows.filter(function(r){ return r.emp === n && haveDays[dstr(r.date)]; })
+                          .reduce(function(a,r){ return a + (r.mins||0); }, 0);
+        var newMins = fresh.reduce(function(a,r){ return a + (r.mins||0); }, 0);
+        if (oldMins === newMins){
+          note(n, "same timecard sent again — ignored");
+          return;                                   // genuinely identical, skip
+        }
+        replacing.push({ name:n, oldMins:oldMins, newMins:newMins, fresh:fresh });
+        return;                                     // ask before touching it
+      }
+      added = added.concat(fresh);
+    });
+
+    if (replacing.length){
+      var msg = replacing.map(function(r){
+        return r.name + ": you already sent " + fmtHM(r.oldMins) +
+               " for those days, this card says " + fmtHM(r.newMins);
+      }).join("\n");
+      if (confirm("Some of these days are already in.\n\n" + msg +
+                  "\n\nUse the NEW card and replace what's there?\n" +
+                  "Cancel keeps what you already sent.")){
+        replacing.forEach(function(r){
+          rows = rows.filter(function(x){
+            if (x.emp !== r.name) return true;
+            return !r.fresh.some(function(nr){ return dstr(nr.date) === dstr(x.date); });
+          });
+          added = added.concat(r.fresh);
+          note(r.name, "corrected timecard replaced " + fmtHM(r.oldMins) + " with " + fmtHM(r.newMins));
+        });
+      } else {
+        replacing.forEach(function(r){ note(r.name, "a different version of this card was not used"); });
+      }
+    }
+    if (!added.length){
+      alert("Choose or type a name for at least one sheet, then continue.");
+      return;
+    }
+    rows = rows.concat(added);
+    pendingSheets = [];
+    $("#assign").classList.add("hide");
+    say(added.length + " punches loaded from " + Object.keys(seen).length +
+        (Object.keys(seen).length === 1 ? " timecard." : " timecards."));
+    build();
+  });
+
+  function readFile(f){
+    say("");
+    if (/\.pdf$/i.test(f.name)) return readPdf(f);
+    if (typeof XLSX === "undefined"){
+      say("Couldn't load the spreadsheet reader. Reload the page and try again.", true);
+      return;
+    }
+    say("Reading " + f.name + "…");
+    var r = new FileReader();
+    r.onload = function(e){
+      try{
+        var wb = XLSX.read(e.target.result, { type:"array", cellDates:true });
+        var sh = wb.Sheets[wb.SheetNames[0]];
+        ingest(XLSX.utils.sheet_to_json(sh, { header:1, raw:true, defval:"" }));
+      }catch(err){ say("Couldn't read " + f.name + ". Try exporting it as CSV. " + err, true); }
+    };
+    r.readAsArrayBuffer(f);
+  }
+
+  /* ---------- US federal holidays ---------- */
+  function nthWeekday(year, month, weekday, n){      // n = 1..5, or -1 for last
+    if (n > 0){
+      var d = new Date(year, month, 1);
+      var shift = (weekday - d.getDay() + 7) % 7;
+      return new Date(year, month, 1 + shift + (n-1)*7);
+    }
+    var last = new Date(year, month + 1, 0);
+    var back = (last.getDay() - weekday + 7) % 7;
+    return new Date(year, month + 1, 0 - back);
+  }
+  function observed(d){                              // Sat -> Fri, Sun -> Mon
+    if (d.getDay() === 6) return new Date(d.getTime() - 86400000);
+    if (d.getDay() === 0) return new Date(d.getTime() + 86400000);
+    return d;
+  }
+  function holidaysFor(year){
+    var h = {};
+    function put(date, name){ h[dstr(date)] = name; }
+    put(observed(new Date(year,0,1)),  "New Year's Day");
+    put(nthWeekday(year,0,1,3),        "Martin Luther King Jr. Day");
+    put(nthWeekday(year,1,1,3),        "Presidents' Day");
+    put(nthWeekday(year,4,1,-1),       "Memorial Day");
+    put(observed(new Date(year,5,19)), "Juneteenth");
+    put(observed(new Date(year,6,4)),  "Independence Day");
+    put(nthWeekday(year,8,1,1),        "Labor Day");
+    put(nthWeekday(year,9,1,2),        "Columbus Day");
+    put(observed(new Date(year,10,11)),"Veterans Day");
+    put(nthWeekday(year,10,4,4),       "Thanksgiving");
+    put(observed(new Date(year,11,25)),"Christmas Day");
+    var tg = nthWeekday(year,10,4,4);
+    put(new Date(tg.getTime()+86400000), "Day after Thanksgiving");
+    return h;
+  }
+  var HOL_CACHE = {};
+  function holidayName(d){
+    if (!d) return null;
+    var y = d.getFullYear();
+    if (!HOL_CACHE[y]) HOL_CACHE[y] = holidaysFor(y);
+    return HOL_CACHE[y][dstr(d)] || null;
+  }
+
+  /* ---------- rules ---------- */
+  function rules(){
+    return {
+      round: $("#r-round").value,
+      ot: parseFloat($("#r-ot").value) || 40,
+      longMins: (parseFloat($("#r-long").value) || 10) * 60,
+      early: parseTime($("#r-early").value),
+      close: [null, parseTime($("#c-1").value), parseTime($("#c-2").value), parseTime($("#c-3").value), parseTime($("#c-4").value), parseTime($("#c-5").value), null],
+      expect: $("#r-expect").value.split("\n").map(norm).filter(Boolean)
+    };
+  }
+  function roundHrs(mins, mode){
+    var h = mins/60;
+    if (mode === "none") return Math.round(h*100)/100;
+    var q = h*4;
+    return (mode === "down" ? Math.floor(q) : Math.round(q)) / 4;
+  }
+  function weekOf(d){
+    if (!d) return 0;
+    var x = new Date(d.getTime()); x.setDate(x.getDate() - x.getDay());
+    return x.getTime();
+  }
+
+  /* ---------- flag engine ---------- */
+  function buildFlags(){
+    var R = rules();
+    var f = [];
+    rows.forEach(function(r){
+      if (excluded[r.key] || answered[r.key]) return;
+      var mins = adjust[r.key] ? adjust[r.key].mins : r.mins;
+      var closeAt = r.date ? R.close[r.date.getDay()] : null;
+
+      if (r.inT != null && r.outT == null)
+        f.push({ key:r.key, r:r, hard:true, type:"missing-out",
+          what:"Clocked in at " + fmtTime(r.inT) + ", never clocked out",
+          ask:"No out-punch on this shift. What time did they actually leave?", kind:"time" });
+      else if (r.inT == null && r.outT != null)
+        f.push({ key:r.key, r:r, hard:true, type:"missing-in",
+          what:"Clocked out at " + fmtTime(r.outT) + ", no in-punch",
+          ask:"No in-punch on this shift. What time did they start?", kind:"time-in" });
+      else if (mins != null && closeAt != null && r.outT != null && r.outT > closeAt + 15 && !adjust[r.key]){
+        var over = r.outT - closeAt;
+        f.push({ key:r.key, r:r, type:"after-close", hard: over > 120,
+          what:"Out at " + fmtTime(r.outT) + " — " + fmtHM(over) + " past the " + fmtTime(closeAt) + " close (" + fmtHM(mins) + " total)",
+          ask: over > 120
+            ? "That's well past closing and is usually a missed clock-out. Did they really stay until " + fmtTime(r.outT) + "?"
+            : "Staying " + fmtHM(over) + " past close — was that approved, and what were they doing?",
+          kind:"late", over:over });
+      }
+      else if (mins != null && mins > R.longMins && r.inT != null && !adjust[r.key])
+        f.push({ key:r.key, r:r, type:"long", hard: mins >= 600,
+          what:fmtTime(r.inT) + " – " + fmtTime(r.outT) + " = " + fmtHM(mins) + " on one day",
+          ask:"That's a long day. Did they really work it, or is a punch wrong?", kind:"long-day" });
+      else if (mins != null && mins >= 600 && r.inT != null && !adjust[r.key])
+        f.push({ key:r.key, r:r, type:"tenhour", hard:true,
+          what:fmtTime(r.inT) + " – " + fmtTime(r.outT) + " = " + fmtHM(mins) + " on one day",
+          ask:"That's a ten-hour day. Was that real, or is a punch wrong?", kind:"long-day" });
+      else if (r.inT != null && (r.inT < 5*60 || r.inT > 20*60) && !adjust[r.key])
+        f.push({ key:r.key, r:r, type:"odd-hour", hard:true,
+          what:"Clocked in at " + fmtTime(r.inT),
+          ask:"That's outside any normal shift. Is the punch wrong?", kind:"odd" });
+      else if (r.outT != null && (r.outT > 22*60 || r.outT < 6*60) && !adjust[r.key])
+        f.push({ key:r.key, r:r, type:"odd-hour", hard:true,
+          what:"Clocked out at " + fmtTime(r.outT),
+          ask:"That's outside any normal shift. Is the punch wrong?", kind:"odd" });
+      else if (mins != null && mins > 16*60 && !adjust[r.key] && !excluded[r.key])
+        f.push({ key:r.key, r:r, type:"impossible", hard:true,
+          what:"This day reads as " + fmtHM(mins) + ", which can't be one shift",
+          ask:"That line didn't read properly. Leave the day off and fix it in the time clock?",
+          kind:"unreadable" });
+      else if (r.unreadable && !adjust[r.key] && !excluded[r.key])
+        f.push({ key:r.key, r:r, type:"unreadable", hard:true,
+          what:"This line didn't read properly" + (r.note ? " — note says: " + r.note : ""),
+          ask:"The time clock line for this day couldn't be read. What should it be?",
+          kind:"unreadable" });
+      else if (r.unlabeled && !adjust[r.key])
+        f.push({ key:r.key, r:r, type:"unlabeled",
+          what:"An adjustment of " + fmtHM(r.mins) + " on this day, with no category" + (r.note ? " — note says: " + r.note : ""),
+          ask:"Extra time was added to this day on the clock. What was it for?", kind:"category" });
+      else if (mins != null && mins < 5)
+        f.push({ key:r.key, r:r, type:"tiny", what:"Shift of " + fmtHM(mins),
+          ask:"Almost no time on this punch — usually a double clock-in.", kind:"drop" });
+    });
+
+    // worked on a federal holiday
+    rows.forEach(function(r){
+      if (excluded[r.key] || holidayWorked[r.key]) return;
+      var mins = adjust[r.key] ? adjust[r.key].mins : r.mins;
+      if (mins == null || mins < 5 || r.inT == null) return;
+      var hol = holidayName(r.date);
+      if (!hol) return;
+      f.push({ key:"hol|"+r.key, r:r, type:"holiday-worked", emp:r.emp,
+        what:hol + " — clocked " + fmtTime(r.inT) + " to " + fmtTime(r.outT) + " (" + fmtHM(mins) + ")",
+        ask:"That's " + hol + ". Did they actually work, or should this be holiday pay?",
+        kind:"holiday-worked", hol:hol });
+    });
+
+    // early starts, grouped per employee
+    var early = {};
+    rows.forEach(function(r){
+      if (excluded[r.key] || R.early == null || r.inT == null) return;
+      if (r.inT < R.early){ (early[r.emp] = early[r.emp] || []).push(r); }
+    });
+    Object.keys(early).forEach(function(emp){
+      var list = early[emp];
+      if (earlyApproved[emp]) return;
+      f.push({ key:"early|"+emp, emp:emp, type:"early", group:list,
+        what: list.length + (list.length===1?" shift":" shifts") + " starting before " + fmtTime(R.early) +
+              " — " + list.map(function(r){ return dstr(r.date)+" "+fmtTime(r.inT); }).join(", "),
+        ask:"Clocking in before the office opens. Was there a patient scheduled that early, or did they just arrive early?", kind:"early" });
+    });
+
+    // weekly overtime — per employee at each office; the entities are separate
+    // employers, so hours are never pooled across them.
+    var wk = {};
+    rows.forEach(function(r){
+      if (excluded[r.key]) return;
+      var mins = adjust[r.key] ? adjust[r.key].mins : r.mins;
+      if (mins == null) return;
+      var k = r.emp + "|" + payingOffice(r.emp, r.office || "?") + "|" + weekOf(r.date);
+      wk[k] = (wk[k] || 0) + mins;
+    });
+    Object.keys(wk).forEach(function(k){
+      var parts = k.split("|"), emp = parts[0], off = parts[1];
+      var h = roundHrs(wk[k], R.round);
+      if (h > R.ot && !otApproved[k]){
+        var wkStart = parts[2] && parts[2] !== "0" ? dstr(new Date(parseInt(parts[2],10))) : "";
+        f.push({ key:"ot|"+k, emp:emp, type:"ot", office:off,
+          otHours:h, otOver:+(h - R.ot).toFixed(2), weekLabel:wkStart,
+          what:(OFFICES[off] || "This office") + " — " + h.toFixed(2) + " hrs" +
+               (wkStart ? " the week of " + wkStart : " that week") + ", " +
+               (h - R.ot).toFixed(2) + " over " + R.ot,
+          ask:"Overtime at " + (OFFICES[off] || "this office") + ". Why did it happen, and are you approving it?",
+          kind:"ot", otKey:k });
+      }
+    });
+
+    // missing timesheets — from the staff list, plus anyone typed into the rules box
+    var seen = {};
+    rows.forEach(function(r){ seen[lower(r.emp)] = true; });
+    extras.forEach(function(x){ seen[lower(x.emp)] = true; });
+    var thisOffice = $("#office").value;
+    var expected = staff.filter(function(p){
+                          return p.office === thisOffice && String(p.timecard || "yes") !== "no" &&
+                                 !/^Left /.test(String(p.status || ""));
+                        })
+                        .map(function(p){ return p.name; })
+                        .concat(lastPeriodNames[thisOffice] || [])
+                        .concat(R.expect);
+    var dedupe = {};
+    expected.forEach(function(name){
+      if (!name || dedupe[lower(name)]) return;
+      dedupe[lower(name)] = 1;
+      if (!seen[lower(name)] && !missingHandled[name]){
+        var wasPaid = (lastPeriodNames[thisOffice] || []).some(function(x){ return lower(x) === lower(name); });
+        var rec = staff.find(function(x){ return lower(x.name) === lower(name) && x.office === thisOffice; });
+        var occasional = rec && String(rec.occasional || "") === "yes";
+        f.push({ key:"missing|"+name, emp:name, type:"missing-person",
+          hard: !occasional, noSkip: !occasional,
+          what: occasional ? "Covers here now and then — no timecard this period"
+                : (wasPaid ? "Paid last period — no timecard in this batch"
+                           : "On the staff list for this office — no timecard in this batch"),
+          ask:"Nothing for " + name + " this period. What happened?", kind:"missing" });
+      }
+    });
+
+    // partial periods
+    var byEmp = {};
+    rows.forEach(function(r){ if (!excluded[r.key]) (byEmp[r.emp] = byEmp[r.emp] || []).push(r); });
+    var weeks = {};
+    rows.forEach(function(r){ weeks[weekOf(r.date)] = true; });
+    var weekList = Object.keys(weeks);
+    if (weekList.length > 1){
+      Object.keys(byEmp).forEach(function(emp){
+        if (partialOk[emp]) return;
+        var w = {}; byEmp[emp].forEach(function(r){ w[weekOf(r.date)] = true; });
+        if (Object.keys(w).length < weekList.length){
+          f.push({ key:"partial|"+emp, emp:emp, type:"partial",
+            what:"Worked only part of the period",
+            ask:"Only one week of hours. Vacation, started mid-period, or another office?", kind:"partial" });
+        }
+      });
+    }
+    // Every submission ends with the same few questions, whether or not the
+    // punches flagged anything. Skipping them is what causes the phone calls.
+    // every block of vacation or PTO gets an approval question
+    extras.forEach(function(x, i){
+      if (!x.noWork || !/vacation|pto/i.test(x.kind || "")) return;
+      var vkey = "vac|" + x.emp + "|" + i;
+      if (vacApproved[vkey]) return;
+      f.push({ key:vkey, type:"vac-approve", emp:x.emp, vkey:vkey,
+        what:(x.mins/60).toFixed(2) + " hours of " + (x.kind || "time off").toLowerCase(),
+        ask:"Was this time off approved in advance?", kind:"vac" });
+    });
+
+    if (rows.length){
+      if (!wrapUp.timeOff)
+        f.push({ key:"wrap|timeoff", type:"wrap", kind:"wrap-timeoff",
+          what:"Paid time that isn't on the clock",
+          ask:"Did anyone take vacation, PTO or sick time this period that the time clock wouldn't show?" });
+
+      if (!wrapUp.elsewhere)
+        f.push({ key:"wrap|elsewhere", type:"wrap", kind:"wrap-elsewhere",
+          what:"People who covered at another office",
+          ask:"Did anyone from your office work a shift at one of the other practices this period?" });
+
+      if (!wrapUp.everyone)
+        f.push({ key:"wrap|everyone", type:"wrap", kind:"wrap-everyone",
+          what:names().join(", "),
+          ask:"Is that everyone who should be paid by your office this period?" });
+
+      if (!wrapUp.anything)
+        f.push({ key:"wrap|anything", type:"wrap", kind:"wrap-anything",
+          what:"Anything else",
+          ask:"Anything else payroll should know before this goes in — a raise, a bonus, a final paycheck, a schedule change?" });
+    }
+    flags = f.filter(function(x){ return !answeredKeys[x.key]; });
+  }
+
+  function names(){
+    var seen = {};
+    rows.forEach(function(r){ if (!excluded[r.key]) seen[r.emp] = 1; });
+    return Object.keys(seen).sort();
+  }
+
+  var earlyApproved = {}, otApproved = {}, missingHandled = {}, partialOk = {}, wrapUp = {}, otLog = {}, holidayWorked = {}, vacApproved = {}, answered = {};
+
+  /* ---------- totals ---------- */
+  function payingOffice(empName, sheetOffice){
+    // Use the record for THIS office. Someone paid by two entities has a record
+    // for each, and only the one whose sheet we're reading decides where these
+    // hours belong — taking any record would send a whole office's hours to the
+    // wrong company.
+    var p = staff.find(function(x){
+      return lower(x.name) === lower(empName) && x.office === sheetOffice;
+    });
+    if (p && p.paid_by && p.paid_by !== sheetOffice) return p.paid_by;
+    return sheetOffice;
+  }
+
+  function totals(){
+    var R = rules();
+    var byEmp = {};
+    rows.forEach(function(r){
+      if (excluded[r.key]) return;
+      var mins = adjust[r.key] ? adjust[r.key].mins : r.mins;
+      if (mins == null) return;
+      var e = byEmp[r.emp] = byEmp[r.emp] || { weeks:{}, total:0, offices:{}, byOfficeWeek:{} };
+      var w = weekOf(r.date);
+      e.weeks[w] = (e.weeks[w] || 0) + mins;
+      e.total += mins;
+      var payOff = payingOffice(r.emp, r.office || "?");
+      e.offices[payOff] = (e.offices[payOff] || 0) + mins;
+      var ow = payOff + "|" + w;
+      e.byOfficeWeek = e.byOfficeWeek || {};
+      e.byOfficeWeek[ow] = (e.byOfficeWeek[ow] || 0) + mins;
+    });
+    extras.forEach(function(x){
+      var e = byEmp[x.emp] = byEmp[x.emp] || { weeks:{}, total:0, notes:[] };
+      if (!x.noWork){
+        e.weeks[x.week || 0] = (e.weeks[x.week||0] || 0) + x.mins;
+        e.total += x.mins;
+      }
+      (e.notes = e.notes || []).push(x.label);
+    });
+    return byEmp;
+  }
+
+  /* ---------- render ---------- */
+  var OFFICES = { penn:"Fort Worth Dentist", fws:"Camp Bowie Dentist", arl:"Arlington Dental Implants & Cosmetic Dentistry" };
+  var LEGAL   = { penn:"Worth Dentistry, PLLC", fws:"FWS PLLC", arl:"Arlington Dentistry, PLLC" };
+  function renderCombined(){
+    var R = rules();
+    var per = {};   // name -> week -> {office: mins}
+    Object.keys(OFFICES).forEach(function(code){
+      var raw = null;
+      try { raw = localStorage.getItem("payroll:" + code); } catch(e){}
+      if (!raw) return;
+      var d; try { d = JSON.parse(raw); } catch(e){ return; }
+      (d.rows||[]).forEach(function(r){
+        if ((d.excluded||{})[r.key]) return;
+        var mins = (d.adjust||{})[r.key] ? d.adjust[r.key].mins : r.mins;
+        if (mins == null) return;
+        var dt = r.d ? new Date(r.d) : null;
+        var w = dt ? weekOf(dt) : 0;
+        var p = per[r.emp] = per[r.emp] || {};
+        var pw = p[w] = p[w] || {};
+        pw[code] = (pw[code] || 0) + mins;
+      });
+    });
+
+    var out = [], any = false;
+    Object.keys(per).sort().forEach(function(name){
+      Object.keys(per[name]).forEach(function(w){
+        var offs = Object.keys(per[name][w]);
+        if (offs.length < 2) return;
+        any = true;
+        var totalM = 0; offs.forEach(function(o){ totalM += per[name][w][o]; });
+        var h = roundHrs(totalM, R.round);
+        var over = false;
+        var when = w > 0 ? new Date(parseInt(w,10)) : null;
+        out.push('<div class="item '+(over?"hard":"")+'" style="border:1px solid '+(over?"var(--alert)":"var(--rule)")+';border-radius:4px;margin-bottom:10px;background:var(--panel)">'+
+          '<div style="padding:14px 16px">'+
+          '<div style="font-weight:600">'+esc(name)+
+            (when ? ' <span style="font-weight:400;color:var(--slate);font-size:13px">week of '+dstr(when)+'</span>' : '')+'</div>'+
+          '<div style="margin-top:8px;font-size:14px;color:var(--slate)">'+
+            offs.map(function(o){ return esc(OFFICES[o]) + ' <span class="num">'+roundHrs(per[name][w][o],R.round).toFixed(2)+'</span>'; }).join('<br>')+
+            '<div style="margin-top:6px;font-size:13px">across all offices <span class="num" style="font-weight:600">'+h.toFixed(2)+'</span> — for your information; each entity pays its own hours</div></div>'+
+          '' +
+          '</div></div>');
+      });
+    });
+    $("#combined").innerHTML = any ? out.join("") :
+      '<div class="empty">No one worked two offices in the same week — or the other offices haven\'t been loaded yet. Switch offices, load each timesheet, then come back.</div>';
+  }
+
+  function build(){
+    // Reveal first: if one renderer trips, the rest of the page still appears
+    // instead of the screen ending at the last thing that happened to work.
+    show("#s-flags");
+    if (!MANAGER){ show("#s-totals"); show("#foot"); }
+    var steps = [
+      ["reading the timecards", buildFlags],
+      ["the summary line", renderLedger],
+      ["the roster check", renderRoster],
+      ["the questions", renderQueue],
+      ["the hours table", renderTotals],
+      ["the office status", renderPeriodStatus]
+    ];
+    for (var i = 0; i < steps.length; i++){
+      try { steps[i][1](); }
+      catch (err){
+        say("Something went wrong building " + steps[i][0] + ": " + err.message, true);
+        if (window.console) console.error(steps[i][0], err);
+      }
+    }
+    save();
+  }
+
+  function renderLedger(){
+    var R = rules(), t = totals();
+    var people = Object.keys(t).length;
+    var mins = 0; Object.keys(t).forEach(function(k){ mins += t[k].total; });
+    var ot = 0;
+    Object.keys(t).forEach(function(k){
+      Object.keys(t[k].weeks).forEach(function(w){
+        var h = roundHrs(t[k].weeks[w], R.round);
+        if (h > R.ot) ot += h - R.ot;
+      });
+    });
+    var open = flags.length;
+    var L = $("#ledger-line");
+    if (L){
+      L.textContent = MANAGER
+        ? people + (people === 1 ? " timecard" : " timecards") + " loaded"
+        : people + (people === 1 ? " person" : " people") + " · " +
+          roundHrs(mins, R.round).toFixed(2) + " hours" +
+          (ot > 0 ? " · " + ot.toFixed(2) + " overtime" : "") +
+          " · " + rows.length + " punches";
+      L.classList.remove("hide");
+    }
+
+  }
+  function cell(k,v,cls){
+    return '<div class="cell '+(cls||"")+'"><div class="k">'+k+'</div><div class="v">'+v+'</div></div>';
+  }
+
+  var qIndex = 0;
+  function renderRoster(){
+    var box = $("#roster-check");
+    if (!box) return;
+    var office = $("#office").value;
+    var expected = {};
+    staff.filter(function(p){
+      return p.office === office && String(p.timecard || "yes") !== "no" &&
+             String(p.occasional || "") !== "yes" && !/^Left /.test(String(p.status || ""));
+    }).forEach(function(p){ expected[p.name] = "on staff"; });
+    (lastPeriodNames[office] || []).forEach(function(n){ expected[n] = expected[n] || "paid last period"; });
+    if (!rows.length || !Object.keys(expected).length){ box.classList.add("hide"); return; }
+
+    var here = {};
+    rows.forEach(function(r){ here[lower(r.emp)] = 1; });
+    extras.forEach(function(x){ here[lower(x.emp)] = 1; });
+    var missing = Object.keys(expected).filter(function(n){
+      return !here[lower(n)] && !missingHandled[n];
+    });
+    var got = Object.keys(expected).length - missing.length;
+
+    box.innerHTML =
+      '<div style="border:1px solid '+(missing.length ? "var(--alert)" : "var(--rule)")+
+      ';background:'+(missing.length ? "var(--alert-bg)" : "var(--panel)")+
+      ';border-radius:4px;padding:14px 16px">'+
+        '<div style="font-weight:600">'+got+' of '+Object.keys(expected).length+' timecards in</div>'+
+        (missing.length
+          ? '<div style="margin-top:5px;font-size:14.5px;color:var(--alert)">Still missing: '+esc(missing.join(", "))+'</div>'+
+            '<div style="margin-top:4px;font-size:13.5px;color:var(--slate)">Add the missing cards to this batch, or answer the questions below.</div>'
+          : '<div style="margin-top:4px;font-size:13.5px;color:var(--slate)">Everyone expected this period is accounted for.</div>')+
+      '</div>';
+    box.classList.remove("hide");
+  }
+
+  function renderQueue(){
+    var q = $("#queue"), done = $("#q-done");
+    if (!flags.length){
+      q.innerHTML = "";
+      if (rows.length){
+        var stillOut = Object.keys(missingHandled).filter(function(n){
+          return (notes[n] || []).join(" ").indexOf("STILL MISSING") > -1 ||
+                 (notes[n] || []).join(" ").indexOf("timecard to follow") > -1;
+        });
+        done.textContent = MANAGER
+          ? (stillOut.length
+              ? "Submitted — still waiting on a timecard for " + stillOut.join(", ") + ". Send it and upload again."
+              : "All done — your timecards are in. Nothing else to do.")
+          : "Nothing left to check — the hours below are ready.";
+        done.style.color = stillOut.length ? "var(--alert)" : "var(--ok)";
+        done.classList.remove("hide");
+      } else done.classList.add("hide");
+      return;
+    }
+    done.classList.add("hide");
+    if (!flags.length && rows.length) { /* handled above */ }
+    if (qIndex >= flags.length) qIndex = 0;
+    var echo = lastOutcome ? '<p class="echo">'+esc(lastOutcome)+'</p>' : "";
+    lastOutcome = "";
+    var f = flags[qIndex];
+    var who = f.emp || (f.r && f.r.emp) || "";
+    var when = f.r && f.r.date ? dstr(f.r.date) + ", " + f.r.day : "";
+
+    q.innerHTML = echo +
+      '<div class="card'+(f.hard ? " hard" : "")+(f.type === "wrap" ? " calm" : "")+'">'+
+        '<div class="card-top">'+
+          '<span class="counter">'+(qIndex+1)+' of '+flags.length+'</span>'+
+          '<span class="sev '+(f.type === "wrap" ? "ok" : (f.hard ? "red" : "amber"))+'">'+
+            (f.type === "wrap" ? "Routine" : (f.hard ? "Needs fixing" : "Please check"))+'</span>'+
+          (flags.length > 1 && !f.noSkip ? '<button class="skip" id="q-skip">Skip for now</button>' : '')+
+        '</div>'+
+        '<h2 class="q-who">'+esc(who)+(when ? ' <span>'+esc(when)+'</span>' : '')+'</h2>'+
+        '<p class="q-what">'+esc(f.what)+'</p>'+
+        '<p class="q-ask">'+esc(f.ask)+'</p>'+
+        '<div class="acts"></div>'+
+      '</div>';
+
+    acts(q.querySelector(".acts"), f, q.querySelector(".card"));
+    var sk = $("#q-skip");
+    if (sk) sk.addEventListener("click", function(){ qIndex = (qIndex + 1) % flags.length; renderQueue(); });
+  }
+  function esc(s){ return String(s).replace(/[&<>"]/g, function(c){ return ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"})[c]; }); }
+
+  var REASONS = {
+    late: ["Patient ran over","Emergency patient","Sterilization and turnover","Covering for someone",
+           "Month-end or reports","Training or meeting","Forgot to clock out"],
+    early: ["Early patient scheduled","Opening the office","Lab case or setup","Covering for someone",
+            "Training or meeting","Just arrived early"],
+    ot:   ["Covered a call-out","Short staffed","Emergency patient","Extra clinic day",
+           "Training or meeting","Month-end","Doctor ran late"]
+  };
+
+  function reasonPicker(box, which){
+    var sel = document.createElement("select");
+    sel.style.cssText = "border:1px solid var(--rule-strong);border-radius:3px;padding:8px 10px;min-width:210px";
+    sel.innerHTML = '<option value="">Pick a reason…</option>' +
+      REASONS[which].map(function(r){ return '<option>'+esc(r)+'</option>'; }).join("");
+    box.appendChild(sel);
+    return sel;
+  }
+
+  var answers = {};       // flagKey -> {label, reason, ...}
+  var proposals = {};     // flagKey -> a change the owner may approve. Nothing
+                          // here alters an hour until the owner accepts it.
+  var answeredKeys = {};  // flagKey -> true. The catch-all that stops any
+                          // question reappearing, whatever kind it is.
+
+  /** In a manager's hands every button is a statement about what happened.
+   *  Nothing they choose changes an hour — the owner applies corrections. */
+  function record(f, label, reason, proposal){
+    answeredKeys[f.key] = true;
+    if (proposal) proposals[f.key] = proposal;
+    answers[f.key] = { label: label, reason: reason || "", proposal: proposal || null,
+                       who: (f.emp || (f.r && f.r.emp) || ""),
+                       when: (f.r && f.r.date) ? dstr(f.r.date) : "",
+                       what: f.what, type: f.type };
+    if (f.kind === "missing") missingHandled[f.emp] = true;
+    if (f.kind === "early")   earlyApproved[f.emp] = "answered";
+    if (f.kind === "ot")      otApproved[f.otKey] = true;
+    if (f.kind === "vac")     vacApproved[f.vkey] = "answered";
+    if (f.kind === "holiday-worked") holidayWorked[f.r.key] = "answered";
+    // the closing questions, or they come round again forever
+    if (f.kind === "wrap-timeoff")   wrapUp.timeOff  = label;
+    if (f.kind === "wrap-elsewhere") wrapUp.elsewhere = label;
+    if (f.kind === "wrap-everyone")  wrapUp.everyone  = label;
+    if (f.kind === "wrap-anything")  wrapUp.anything  = label;
+    if (f.kind === "partial")        partialOk[f.emp] = true;
+    if (f.r && f.r.key && f.kind !== "missing" && f.kind !== "ot") answered[f.r.key] = true;
+  }
+
+  function acts(box, f, el){
+    function btn(label, fn, cls){
+      var b = document.createElement("button");
+      b.className = "act" + (cls ? " "+cls : "");
+      b.textContent = label;
+      b.addEventListener("click", fn);
+      box.appendChild(b);
+      return b;
+    }
+    function resolve(msg){
+      answeredKeys[f.key] = true;
+      lastOutcome = msg;
+      qIndex = 0;
+      build();
+    }
+
+    if (MANAGER){
+      var CHOICES = {
+        "time":          ["They forgot to clock out", "The clock missed it — I'll ask them", "I'm not sure"],
+        "time-in":       ["They forgot to clock in", "The clock missed it — I'll ask them", "I'm not sure"],
+        "late":          REASONS.late.concat(["I'm not sure"]),
+        "long-day":      ["Yes — they really worked that long", "They forgot to clock out",
+                          "They stayed late for a patient", "The punch looks wrong to me", "I'm not sure"],
+        "odd":           ["That punch is wrong", "They really were here", "I'm not sure"],
+        "holiday-worked":["They worked the holiday", "That should be holiday pay", "Both — worked and holiday pay"],
+        "early":         REASONS.early.concat(["I'm not sure"]),
+        "ot":            REASONS.ot.concat(["I'm not sure"]),
+        "vac":           ["Approved ahead of time", "Approved after the fact", "Not approved"],
+        "category":      ["Worked time", "Holiday", "PTO or vacation", "Sick", "I'm not sure"],
+        "drop":          ["Double clock-in", "They really were here", "I'm not sure"],
+        "missing":       ["Didn't work this period", "Worked at another office", "On vacation or leave",
+                          "Their card is coming", "No longer with us", "I can't find it"],
+        "wrap-timeoff":  ["No, it's all on the timecards", "Someone's time off is missing"],
+        "wrap-elsewhere":["No", "Yes — someone covered elsewhere"],
+        "wrap-everyone": ["Yes, that's everyone", "Someone's card is missing"],
+        "wrap-anything": ["Nothing else", "Someone's last paycheck", "A raise to apply", "A bonus to add",
+                          "A new hire starting", "Schedule change", "Please call me"]
+      };
+      // An explanation box sits above the answers. Anything typed here rides
+      // along with whichever answer is picked — and on its own it IS an answer,
+      // because no set of buttons ever covers everything.
+      var own = document.createElement("input");
+      own.className = "note explain";
+      own.placeholder = "Add an explanation (optional)";
+      box.appendChild(own);
+
+      function answer(label, proposal){
+        var extra = own.value.trim();
+        var full = extra ? label + " — " + extra : label;
+        record(f, label, extra, proposal);
+        note(f.emp || (f.r && f.r.emp) || "— office note",
+             (f.what ? f.what + " → " : "") + full);
+        resolve(full);
+      }
+
+      (CHOICES[f.kind] || ["Noted"]).forEach(function(choice, i){
+        btn(choice, function(){ answer(choice); }, i === 0 ? "pick" : "");
+      });
+
+      // Some answers carry a fact with a number in it — "she left at 4:15".
+      // That is testimony, not an edit: it is stored as a PROPOSAL against the
+      // original row and changes nothing until the owner approves it.
+      var PROPOSABLE = { "time":1, "time-in":1, "late":1, "long-day":1, "odd":1, "unreadable":1, "category":1 };
+      if (PROPOSABLE[f.kind] && f.r){
+        var pt = document.createElement("input");
+        pt.className = "note propose";
+        pt.placeholder = f.kind === "time-in" ? "If you know it: the real start time, e.g. 7:57 AM"
+                                              : "If you know it: the real finish time, e.g. 4:15 PM";
+        box.appendChild(pt);
+        btn("Report this time", function(){
+          var t = parseTime(pt.value);
+          if (t == null){ pt.focus(); return; }
+          var mins = null;
+          if (f.kind === "time-in" && f.r.outT != null) mins = f.r.outT >= t ? f.r.outT - t : (f.r.outT + 1440) - t;
+          else if (f.r.inT != null) mins = t >= f.r.inT ? t - f.r.inT : (t + 1440) - f.r.inT;
+          answer((f.kind === "time-in" ? "Started at " : "Finished at ") + fmtTime(t),
+                 { rowKey: f.r.key, emp: f.r.emp, date: dstr(f.r.date),
+                   field: f.kind === "time-in" ? "in" : "out",
+                   value: fmtTime(t), proposedMins: mins,
+                   originalMins: f.r.mins, status: "awaiting owner" });
+        });
+      }
+
+      var send = btn("Send just my explanation", function(){
+        if (!own.value.trim()){ own.focus(); return; }
+        answer("Explained");
+      });
+      own.addEventListener("keydown", function(e){ if (e.key === "Enter") send.click(); });
+      return;
+    }
+
+    if (f.kind === "time" || f.kind === "time-in"){
+      var R0 = rules(), close0 = f.r.date ? R0.close[f.r.date.getDay()] : null;
+      if (f.kind === "time" && close0 != null && f.r.inT != null){
+        btn("They left at closing, " + fmtTime(close0), function(){
+          adjust[f.r.key] = { mins: close0 - f.r.inT, label:"out set to closing time" };
+          resolve("Set to " + fmtTime(close0));
+        }, "pick");
+      }
+      btn("I'll fix it in the time clock and send it again", function(){
+        excluded[f.r.key] = true;
+        note(f.r.emp, "punch on " + dstr(f.r.date) + " being fixed in the time clock");
+        resolve("Left out for now — re-upload once it's corrected");
+      }, close0 == null ? "pick" : "");
+      btn("Leave this day off the pay", function(){
+        excluded[f.r.key] = true;
+        note(f.r.emp, dstr(f.r.date) + " not paid");
+        resolve("Day removed");
+      });
+    }
+    else if (f.kind === "wrap-timeoff"){
+      btn("No, it's all on the timecards", function(){ wrapUp.timeOff = "none"; resolve("Nothing to add"); }, "pick");
+      
+      var wsel = document.createElement("select");
+      wsel.style.cssText = "border:1px solid var(--rule-strong);border-radius:3px;padding:8px 10px";
+      wsel.innerHTML = '<option value="">Who?</option>' + names().map(function(n){ return '<option>'+esc(n)+'</option>'; }).join("");
+      box.appendChild(wsel);
+      btn("This person's is missing — I'll add it in the time clock", function(){
+        if (!wsel.value){ wsel.focus(); return; }
+        note(wsel.value, "paid time off to be added in the time clock — re-upload their card");
+        lastOutcome = "Noted for " + wsel.value + " — add it in the time clock and send the card again";
+        build();
+      });
+      btn("That's everyone", function(){ wrapUp.timeOff = "done"; resolve("Time off noted"); });
+    }
+    else if (f.kind === "wrap-elsewhere"){
+      btn("No", function(){ wrapUp.elsewhere = "none"; resolve("Nobody covered elsewhere"); }, "pick");
+      var esel = document.createElement("select");
+      esel.style.cssText = "border:1px solid var(--rule-strong);border-radius:3px;padding:8px 10px";
+      esel.innerHTML = '<option value="">Who?</option>' + names().map(function(n){ return '<option>'+esc(n)+'</option>'; }).join("");
+      box.appendChild(esel);
+      var eoff = document.createElement("select");
+      eoff.style.cssText = "border:1px solid var(--rule-strong);border-radius:3px;padding:8px 10px";
+      eoff.innerHTML = Object.keys(OFFICES).filter(function(o){ return o !== $("#office").value; })
+        .map(function(o){ return '<option value="'+o+'">'+esc(OFFICES[o])+'</option>'; }).join("");
+      box.appendChild(eoff);
+      btn("Note it", function(){
+        if (!esel.value){ esel.focus(); return; }
+        note(esel.value, "also worked at " + (OFFICES[eoff.value] || eoff.value) + " — that office files those hours");
+        lastOutcome = "Noted — " + esel.value + " also worked at " + OFFICES[eoff.value];
+        build();
+      });
+      btn("That's all", function(){ wrapUp.elsewhere = "done"; resolve("Cover shifts noted"); });
+    }
+    else if (f.kind === "wrap-everyone"){
+      btn("Yes, that's everyone", function(){ wrapUp.everyone = "yes"; resolve("Confirmed"); }, "pick");
+      btn("Someone's card is missing — I'll send it", function(){
+        wrapUp.everyone = "pending";
+        note("— office note", "a timecard is still to come");
+        resolve("Noted — send the rest when you have them");
+      });
+    }
+    else if (f.kind === "wrap-anything"){
+      btn("Nothing else", function(){ wrapUp.anything = "none"; resolve("Submitted"); }, "pick");
+      var asel = document.createElement("select");
+      asel.style.cssText = "border:1px solid var(--rule-strong);border-radius:3px;padding:8px 10px;min-width:230px";
+      asel.innerHTML = '<option value="">Something to flag…</option>' +
+        ["Someone's last paycheck","A raise to apply","A bonus to add","A new hire starting",
+         "Schedule change","Please call me"].map(function(x){ return '<option>'+esc(x)+'</option>'; }).join("");
+      box.appendChild(asel);
+      btn("Flag this for payroll", function(){
+        if (!asel.value){ asel.focus(); return; }
+        note("— office note", asel.value);
+        wrapUp.anything = "yes";
+        resolve("Flagged — " + asel.value);
+      });
+    }
+    else if (f.kind === "long-day" || f.kind === "odd"){
+      btn("That's right — they worked it", function(){
+        adjust[f.r.key] = { mins:f.r.mins, label:"verified" };
+        note(f.r.emp, dstr(f.r.date) + " " + fmtHM(f.r.mins) + " confirmed");
+        resolve("Confirmed");
+      }, "pick");
+      var R3 = rules(), c3 = f.r.date ? R3.close[f.r.date.getDay()] : null;
+      if (c3 != null && f.r.inT != null){
+        btn("Forgot to clock out — pay to closing", function(){
+          adjust[f.r.key] = { mins: c3 - f.r.inT, label:"out set to closing time" };
+          resolve("Paid to " + fmtTime(c3));
+        });
+      }
+      btn("I'll fix it in the time clock", function(){
+        excluded[f.r.key] = true;
+        note(f.r.emp, dstr(f.r.date) + " being corrected in the time clock");
+        resolve("Left out — re-upload once it's fixed");
+      });
+    }
+    else if (f.kind === "holiday-worked"){
+      btn("They worked — pay it as worked time", function(){
+        holidayWorked[f.r.key] = "worked";
+        adjust[f.r.key] = { mins:f.r.mins, label:"worked on " + f.hol };
+        note(f.r.emp, "worked " + f.hol);
+        resolve("Counted as worked time");
+      }, "pick");
+      btn("Holiday pay, not worked", function(){
+        holidayWorked[f.r.key] = "holiday";
+        excluded[f.r.key] = true;
+        extras.push({ emp:f.r.emp, mins:f.r.mins, kind:"Holiday",
+                      label:(f.r.mins/60).toFixed(2)+" holiday", noWork:true });
+        resolve("Moved to holiday hours");
+      });
+      btn("Both — worked and gets holiday pay", function(){
+        holidayWorked[f.r.key] = "both";
+        adjust[f.r.key] = { mins:f.r.mins, label:"worked on " + f.hol };
+        extras.push({ emp:f.r.emp, mins:8*60, kind:"Holiday", label:"8.00 holiday", noWork:true });
+        note(f.r.emp, "worked " + f.hol + " plus 8 hours holiday pay");
+        resolve("Worked time plus 8 hours holiday");
+      });
+    }
+    else if (f.kind === "vac"){
+      btn("Yes, approved in advance", function(){
+        vacApproved[f.vkey] = "yes";
+        note(f.emp, "time off approved in advance");
+        resolve("Approved");
+      }, "pick");
+      btn("Approved late, but fine", function(){
+        vacApproved[f.vkey] = "late";
+        note(f.emp, "time off approved after the fact");
+        resolve("Noted");
+      });
+      btn("No — send to the owner", function(){
+        vacApproved[f.vkey] = "owner";
+        note(f.emp, "TIME OFF NOT APPROVED — owner to decide");
+        resolve("Sent to the owner");
+      });
+    }
+    else if (f.kind === "unreadable"){
+      btn("Leave this day off", function(){
+        excluded[f.r.key] = true;
+        note(f.r.emp, dstr(f.r.date) + " unreadable on the timecard — left off");
+        resolve("Left off");
+      }, "pick");
+      btn("I'll fix it in the time clock", function(){
+        excluded[f.r.key] = true;
+        note(f.r.emp, dstr(f.r.date) + " being corrected in the time clock");
+        resolve("Left out — re-upload once it's fixed");
+      });
+    }
+    else if (f.kind === "category"){
+      ["Worked time","Holiday","PTO","Vacation","Sick","Personal"].forEach(function(lab, i){
+        btn(lab, function(){
+          if (lab === "Worked time"){
+            adjust[f.r.key] = { mins: f.r.mins, label:"worked (manual adjustment)" };
+          } else {
+            excluded[f.r.key] = true;
+            extras.push({ emp:f.r.emp, mins:f.r.mins, kind:lab, label:(f.r.mins/60).toFixed(2)+" "+lab.toLowerCase(), noWork:true });
+          }
+          resolve(lab === "Worked time" ? "Counted as worked time" : "Moved to " + lab.toLowerCase());
+        }, i === 0 ? "pick" : "");
+      });
+      btn("Remove it", function(){ excluded[f.r.key] = true; resolve("Removed"); });
+    }
+    else if (f.kind === "drop"){
+      btn("Remove this punch", function(){ excluded[f.r.key] = true; resolve("Punch removed"); }, "pick");
+      btn("Keep it", function(){ adjust[f.r.key] = { mins:f.r.mins, label:"kept" }; resolve("Kept as-is"); });
+    }
+    else if (f.kind === "late"){
+      var lr = reasonPicker(box, "late");
+      btn("Approved — pay the extra time", function(){
+        if (!lr.value){ lr.focus(); return; }
+        adjust[f.r.key] = { mins:f.r.mins, label:"stayed late — " + lr.value };
+        note(f.r.emp, "stayed late " + dstr(f.r.date) + ": " + lr.value);
+        resolve("Approved — " + lr.value);
+      }, "pick");
+      btn("Forgot to clock out — pay to closing", function(){
+        var R2 = rules(), c = f.r.date ? R2.close[f.r.date.getDay()] : null;
+        if (c == null) return;
+        adjust[f.r.key] = { mins: c - f.r.inT, label:"out set to closing time" };
+        note(f.r.emp, "missed clock-out " + dstr(f.r.date) + " — paid to closing");
+        resolve("Paid to " + fmtTime(c));
+      });
+      btn("I'll fix it in the time clock", function(){
+        excluded[f.r.key] = true;
+        note(f.r.emp, dstr(f.r.date) + " being corrected in the time clock");
+        resolve("Left out — re-upload once it's fixed");
+      });
+    }
+    else if (f.kind === "early"){
+      btn("Yes — early patient scheduled", function(){
+        earlyApproved[f.emp] = "approved";
+        note(f.emp, "early starts: early patient scheduled");
+        resolve("Approved — early patient");
+      }, "pick");
+      var er = reasonPicker(box, "early");
+      btn("Approve with this reason", function(){
+        if (!er.value){ er.focus(); return; }
+        earlyApproved[f.emp] = "approved";
+        note(f.emp, "early starts: " + er.value);
+        resolve("Approved — " + er.value);
+      });
+      var openAt = rules().early;
+      btn("Not approved — pay from " + fmtTime(openAt), function(){
+        f.group.forEach(function(r){
+          if (r.outT == null || r.inT == null || r.inT >= openAt) return;
+          adjust[r.key] = { mins: r.outT - openAt, label:"start set to " + fmtTime(openAt) };
+        });
+        earlyApproved[f.emp] = "trimmed";
+        note(f.emp, "early time not approved — paid from " + fmtTime(openAt));
+        resolve("Paid from " + fmtTime(openAt));
+      });
+    }
+    else if (f.kind === "ot"){
+      var orsn = reasonPicker(box, "ot");
+      btn("Approve with this reason", function(){
+        if (!orsn.value){ orsn.focus(); return; }
+        otApproved[f.otKey] = true;
+        otLog[f.otKey] = { emp:f.emp, office:f.office, hours:f.otHours, over:f.otOver,
+                           week:f.weekLabel, reason:orsn.value, status:"approved" };
+        resolve("Approved — " + orsn.value);
+      }, "pick");
+      btn("Send to owner to decide", function(){
+        otApproved[f.otKey] = true;
+        otLog[f.otKey] = { emp:f.emp, office:f.office, hours:f.otHours, over:f.otOver,
+                           week:f.weekLabel, reason:(orsn.value || ""), status:"owner" };
+        resolve("Sent to you to decide");
+      });
+      btn("It's a mistake — I'll fix a punch", function(){
+        qIndex = 0; lastOutcome = "Fix the punch above, then this will recalculate.";
+        renderQueue();
+      });
+    }
+    else if (f.kind === "missing"){
+      btn("Didn't work this period", function(){
+        missingHandled[f.emp] = true; note(f.emp, "no hours this period");
+        resolve("Marked as no hours");
+      }, "pick");
+      btn("Worked at another office", function(){
+        missingHandled[f.emp] = true; note(f.emp, "worked at another office — that office files the hours");
+        resolve("Noted — another office");
+      });
+      btn("On vacation or leave", function(){
+        missingHandled[f.emp] = true; note(f.emp, "on leave this period");
+        resolve("Marked as on leave");
+      });
+      btn("Their card is coming — I'll send it", function(){
+        missingHandled[f.emp] = true;
+        note(f.emp, "timecard to follow");
+        resolve("Noted — send it when you have it");
+      });
+      btn("No longer with us", function(){
+        missingHandled[f.emp] = true; note(f.emp, "NO LONGER EMPLOYED — check final paycheck");
+        resolve("Flagged for a final paycheck");
+      });
+      btn("Still looking for it", function(){
+        missingHandled[f.emp] = true; note(f.emp, "TIMECARD STILL MISSING");
+        resolve("Flagged as outstanding — payroll will chase it");
+      });
+    }
+    else if (f.kind === "partial"){
+      btn("Expected", function(){ partialOk[f.emp] = true; resolve("Confirmed expected"); }, "pick");
+      var pv = document.createElement("input");
+      pv.className = "time num"; pv.placeholder = "hrs e.g. 40";
+      box.appendChild(pv);
+      btn("Paid time off — these hours", function(){
+        var v = parseFloat(pv.value);
+        if (isNaN(v)){ pv.focus(); return; }
+        extras.push({ emp:f.emp, mins: Math.round(v*60), label:"vacation", kind:"Vacation", noWork:true });
+        partialOk[f.emp] = true; note(f.emp, v.toFixed(2) + " vacation");
+        resolve("Added " + v.toFixed(2) + " vacation hours");
+      }, "pick");
+      btn("Unpaid", function(){ partialOk[f.emp] = true; note(f.emp,"unpaid time off"); resolve("Noted as unpaid"); });
+      btn("Other office", function(){ partialOk[f.emp] = true; note(f.emp,"split with another office"); resolve("Noted — split office"); });
+    }
+
+  }
+
+  var otherHrs = {};   // name -> {total, kinds:[]}
+  function addOther(emp, hrs, kind){
+    var o = otherHrs[emp] = otherHrs[emp] || { total:0, kinds:[], by:{} };
+    o.total += hrs;
+    o.by[kind] = (o.by[kind] || 0) + hrs;
+    if (o.kinds.indexOf(kind) < 0) o.kinds.push(kind);
+  }
+  var notes = {}, lastOutcome = "";
+  function note(emp, txt){ if (!emp || !txt) return; (notes[emp] = notes[emp] || []).push(txt); }
+
+  function renderTotals(){
+    var R = rules(), t = totals();
+    otherHrs = {};
+    var hol = norm($("#r-holiday").value).match(/(\d{1,2}\/\d{1,2})?\s*(\d+(?:\.\d+)?)/);
+    if (hol && hol[2]){
+      Object.keys(t).forEach(function(n){ addOther(n, parseFloat(hol[2]), "Holiday"); });
+    }
+    extras.forEach(function(x){ if (x.kind) addOther(x.emp, x.mins/60, x.kind); });
+    var names = Object.keys(t).sort();
+    var weeks = {};
+    rows.forEach(function(r){ weeks[weekOf(r.date)] = true; });
+    var wk = Object.keys(weeks).sort();
+    var html = "<thead><tr><th>Employee</th>";
+    wk.forEach(function(w,i){ html += '<th class="n">Wk '+(i+1)+' worked</th>'; });
+    html += '<th class="n">Regular</th><th class="n">Overtime</th><th class="n">Holiday</th>' +
+      '<th class="n">Vacation / PTO</th><th class="n">Other</th><th>Notes</th></tr></thead><tbody>';
+    var gt = 0, gto = 0, gother = 0, ghol = 0, gvac = 0;
+    names.forEach(function(n){
+      var e = t[n], ot = 0, isOt = false;
+      var cells = "";
+      wk.forEach(function(w){
+        var m = e.weeks[w] || 0;
+        cells += '<td class="n">' + (m ? roundHrs(m, R.round).toFixed(2) : "—") + '</td>';
+      });
+      // overtime is assessed separately for each office this person worked
+      Object.keys(e.byOfficeWeek || {}).forEach(function(ow){
+        var h = roundHrs(e.byOfficeWeek[ow], R.round);
+        if (h > R.ot){ ot += h - R.ot; isOt = true; }
+      });
+      var worked = roundHrs(e.total, R.round);
+      var other = otherHrs[n] ? otherHrs[n].total : 0;
+      var reg = worked - ot;
+      gt += reg; gto += ot; gother += other; ghol += holH; gvac += vacH;
+      var by = (otherHrs[n] && otherHrs[n].by) || {};
+      var holH = by["Holiday"] || 0;
+      var vacH = (by["Vacation"] || 0) + (by["PTO"] || 0);
+      var restParts = [];
+      Object.keys(by).forEach(function(k){
+        if (k === "Holiday" || k === "Vacation" || k === "PTO") return;
+        restParts.push(by[k].toFixed(2) + " " + k.toLowerCase());
+      });
+      var olabel = restParts.length ? restParts.join("<br>") : "—";
+      html += '<tr class="'+(isOt?"ot":"")+'"><td>'+esc(n)+'</td>'+cells+
+        '<td class="n">'+reg.toFixed(2)+'</td>'+
+        '<td class="n">'+(ot ? ot.toFixed(2) : "—")+'</td>'+
+        '<td class="n">'+(holH ? holH.toFixed(2) : "—")+'</td>'+
+        '<td class="n">'+(vacH ? vacH.toFixed(2) : "—")+'</td>'+
+        '<td class="n" style="line-height:1.5">'+olabel+'</td>'+
+        '<td style="font-size:13px;color:var(--slate)">'+
+          (e.offices && Object.keys(e.offices).length > 1
+            ? '<div style="margin-bottom:3px">Enter separately: '+
+              Object.keys(e.offices).map(function(o){ return esc(OFFICES[o]||o)+" "+roundHrs(e.offices[o],R.round).toFixed(2); }).join(" · ")+'</div>'
+            : (function(){
+                var sheetOffs = {};
+                rows.forEach(function(r){ if (r.emp === n && !excluded[r.key]) sheetOffs[r.office] = 1; });
+                var pay = Object.keys(e.offices)[0];
+                var elsewhere = Object.keys(sheetOffs).filter(function(o){ return o !== pay; });
+                return elsewhere.length
+                  ? '<div style="margin-bottom:3px">Worked at '+esc(OFFICES[elsewhere[0]]||"")+
+                    ', paid by '+esc(OFFICES[pay]||"")+'</div>' : '';
+              })())+
+          esc((notes[n]||[]).join("; "))+'</td></tr>';
+    });
+    html += '<tr class="total"><td>All staff</td>';
+    wk.forEach(function(){ html += "<td></td>"; });
+    html += '<td class="n">'+gt.toFixed(2)+'</td><td class="n">'+(gto?gto.toFixed(2):"—")+'</td>'+
+      '<td class="n">'+(ghol?ghol.toFixed(2):"—")+'</td><td class="n">'+(gvac?gvac.toFixed(2):"—")+'</td>'+
+      '<td class="n">'+(gother?gother.toFixed(2):"—")+'</td><td></td></tr></tbody>';
+    $("#totals").innerHTML = html;
+    $("#totals-sub").textContent = "Enter these on the Paychex timesheet — " + names.length + " people, " +
+      gt.toFixed(2) + " regular" + (gto ? ", " + gto.toFixed(2) + " overtime" : ", no overtime") +
+      (gother ? ", " + gother.toFixed(2) + " holiday/vacation" : "");
+    $("#status").textContent = flags.length ? flags.length + " left to decide" : "Ready to submit";
+    $("#approve").disabled = flags.length > 0;
+
+    var sel = $("#o-emp");
+    if (sel){
+      var cur = sel.value;
+      sel.innerHTML = names.map(function(n){ return '<option>'+esc(n)+'</option>'; }).join("");
+      if (cur && names.indexOf(cur) > -1) sel.value = cur;
+    }
+    var multi = names.filter(function(n){ return (notes[n]||[]).join(" ").indexOf("another office") > -1; });
+    // proposals the owner has yet to accept or decline
+    var props = Object.keys(proposals).map(function(k){
+      return Object.assign({ key:k }, proposals[k], { said: (answers[k]||{}).label || "" });
+    }).filter(function(p){ return p.status === "awaiting owner"; });
+    var pbox = $("#proposals");
+    if (pbox){
+      pbox.innerHTML = (IS_OWNER && props.length)
+        ? '<div style="border:1px solid var(--flag);background:var(--flag-bg);border-radius:4px;padding:16px 18px;margin-top:18px">'+
+          '<div style="font-weight:600;margin-bottom:4px">Changes a manager has proposed</div>'+
+          '<p style="color:var(--slate);font-size:13.5px;margin-bottom:10px">None of these has changed an hour. Accept to apply it, or leave it and the clock\'s figure stands.</p>'+
+          '<table style="width:100%"><thead><tr><th>Who</th><th>Day</th><th class="n">On the clock</th>'+
+          '<th class="n">Proposed</th><th class="n">Difference</th><th>What they said</th><th></th></tr></thead><tbody>'+
+          props.map(function(p){
+            var diff = (p.proposedMins||0) - (p.originalMins||0);
+            return '<tr><td>'+esc(p.emp)+'</td><td class="num">'+esc(p.date)+'</td>'+
+              '<td class="n">'+(p.originalMins==null?"—":fmtHM(p.originalMins))+'</td>'+
+              '<td class="n">'+(p.proposedMins==null?"—":fmtHM(p.proposedMins))+'</td>'+
+              '<td class="n" style="color:'+(diff<0?"var(--alert)":"var(--ok)")+'">'+
+                (p.originalMins==null?"—":(diff>=0?"+":"")+fmtHM(diff))+'</td>'+
+              '<td style="font-size:13px">'+esc(p.said)+'</td>'+
+              '<td><button class="act pick" data-acc="'+esc(p.key)+'" style="padding:4px 10px;font-size:13px">Accept</button> '+
+                  '<button class="act" data-dec="'+esc(p.key)+'" style="padding:4px 10px;font-size:13px">Decline</button></td></tr>';
+          }).join("")+'</tbody></table></div>'
+        : "";
+      pbox.querySelectorAll("[data-acc]").forEach(function(b){
+        b.addEventListener("click", function(){
+          var k = b.getAttribute("data-acc"), p = proposals[k];
+          if (!p) return;
+          adjust[p.rowKey] = { mins: p.proposedMins,
+                               label: p.field + " set to " + p.value + " (manager reported, you accepted)" };
+          p.status = "accepted";
+          note(p.emp, p.date + ": " + p.field + " " + p.value + " — accepted");
+          build();
+        });
+      });
+      pbox.querySelectorAll("[data-dec]").forEach(function(b){
+        b.addEventListener("click", function(){
+          var k = b.getAttribute("data-dec"), p = proposals[k];
+          if (!p) return;
+          p.status = "declined";
+          note(p.emp, p.date + ": proposed " + p.field + " " + p.value + " — declined, clock figure stands");
+          build();
+        });
+      });
+    }
+
+    var reported = Object.keys(answers).map(function(k){ return answers[k]; });
+    var rbox = $("#reported");
+    if (rbox){
+      rbox.innerHTML = (IS_OWNER && reported.length)
+        ? '<div style="border:1px solid var(--rule);border-radius:4px;background:var(--panel);padding:16px 18px;margin-top:18px">'+
+          '<div style="font-weight:600;margin-bottom:4px">What the office managers reported</div>'+
+          '<p style="color:var(--slate);font-size:13.5px;margin-bottom:10px">Their answers only. Nothing here has changed anyone\'s hours — apply what you want in the totals above.</p>'+
+          reported.map(function(a){
+            return '<div style="padding:9px 0;border-top:1px solid var(--rule);font-size:14px">'+
+              '<strong>'+esc(a.who)+'</strong>'+(a.when ? ' <span class="num" style="color:var(--slate)">'+esc(a.when)+'</span>' : '')+
+              '<div style="color:var(--slate);margin-top:2px">'+esc(a.what || "")+'</div>'+
+              '<div style="margin-top:3px">→ '+esc(a.label)+'</div></div>';
+          }).join("")+'</div>'
+        : "";
+    }
+    var otRows = Object.keys(otLog).map(function(k){ return otLog[k]; });
+    $("#multi-note").innerHTML = (IS_OWNER && otRows.length)
+      ? '<div style="border:1px solid var(--rule);border-radius:4px;background:var(--panel);padding:16px 18px">'+
+        '<div style="font-weight:600;margin-bottom:10px">Overtime this period</div>'+
+        otRows.map(function(o){
+          return '<div style="padding:9px 0;border-top:1px solid var(--rule);font-size:14px">'+
+            '<strong>'+esc(o.emp)+'</strong> · '+esc(OFFICES[o.office]||"")+
+            (o.week ? ' · week of '+esc(o.week) : '')+' · <span class="num">'+(o.over||0).toFixed(2)+'</span> hrs over'+
+            '<div style="color:'+(o.status === "owner" ? "var(--alert)" : "var(--slate)")+';margin-top:2px">'+
+              (o.status === "owner" ? "Waiting on you" : "Approved by the office manager")+
+              (o.reason ? ' — ' + esc(o.reason) : '')+'</div></div>';
+        }).join("")+'</div>'
+      : "";
+  }
+
+  /* ---------- output ---------- */
+  function summaryText(){
+    var R = rules(), t = totals(), out = [];
+    var code = $("#office").value;
+    out.push(OFFICES[code] + " — " + LEGAL[code]);
+    out.push("Pay period " + ($("#period").value || ""));
+    out.push("");
+    Object.keys(t).sort().forEach(function(n){
+      var e = t[n], tot = roundHrs(e.total, R.round), ot = 0;
+      Object.keys(e.weeks).forEach(function(w){
+        var h = roundHrs(e.weeks[w], R.round); if (h > R.ot) ot += h - R.ot;
+      });
+      var oh = otherHrs[n] ? otherHrs[n].total : 0;
+      out.push(n + " — regular " + (tot-ot).toFixed(2) +
+        (ot ? ", OT " + ot.toFixed(2) : "") +
+        (oh ? ", " + Object.keys(otherHrs[n].by).map(function(k){ return otherHrs[n].by[k].toFixed(2)+" "+k.toLowerCase(); }).join(", ") : "") +
+        ((notes[n]||[]).length ? " — " + notes[n].join("; ") : ""));
+    });
+    var adjKeys = Object.keys(adjust).filter(function(k){ return adjust[k].label !== "kept"; });
+    if (adjKeys.length){
+      out.push(""); out.push("Adjustments made:");
+      adjKeys.forEach(function(k){ out.push("  " + k.split("|")[0] + " " + k.split("|")[1] + " — " + adjust[k].label); });
+    }
+    return out.join("\n");
+  }
+  $("#o-add").addEventListener("click", function(){
+    var v = parseFloat($("#o-hrs").value);
+    if (isNaN(v) || !$("#o-emp").value){ $("#o-hrs").focus(); return; }
+    extras.push({ emp: $("#o-emp").value, mins: Math.round(v*60), kind: $("#o-kind").value,
+                  label: v.toFixed(2) + " " + $("#o-kind").value.toLowerCase(), noWork:true });
+    $("#o-hrs").value = "";
+    build();
+  });
+  function fillPaidBy(sel){
+    var el = $("#n-paid");
+    if (!el) return;
+    el.innerHTML = Object.keys(OFFICES).map(function(c){
+      return '<option value="'+c+'"'+(c === sel ? " selected" : "")+'>'+esc(OFFICES[c])+'</option>';
+    }).join("");
+  }
+
+  function newHire(){
+    var first = $("#n-first").value.trim(), last = $("#n-last").value.trim();
+    if (!first || !last) return null;
+    var tc = $("#n-tc").value;
+    return { id: $("#n-id").value || undefined,
+             onboarding: $("#n-id").value ? undefined : "yes",
+             name: first + " " + last, first:first, last:last,
+             payroll_id: $("#n-pid").value.trim(),
+             timecard: tc === "no" ? "no" : "yes",
+             occasional: tc === "occasional" ? "yes" : "",
+             paid_by: $("#n-paid").value || $("#n-office").value,
+             email:$("#n-email").value.trim(), phone:$("#n-phone").value.trim(),
+             office:$("#n-office").value, role:$("#n-role").value.trim(),
+             status:$("#n-status").value, type:$("#n-type").value,
+             rate:$("#n-rate").value.trim(), otRate:$("#n-ot").value.trim(),
+             start:$("#n-start").value.trim(), mgr:$("#n-mgr").value.trim(), steps:[] };
+  }
+  function hireText(p){
+    return [
+      "New hire for " + (OFFICES[p.office] || p.office) + " (" + (LEGAL[p.office]||"") + ")",
+      "Legal name: " + p.first + " " + p.last,
+      "Email: " + (p.email || "—"),
+      "Mobile: " + (p.phone || "—"),
+      "Job title: " + (p.role || "—"),
+      "Status: " + p.status,
+      "Paid as: " + p.type + (p.rate ? " at " + p.rate : "") + (p.otRate ? " (overtime " + p.otRate + ")" : ""),
+      "Pay frequency: bi-weekly",
+      "First day: " + (p.start || "—"),
+      "Reports to: " + (p.mgr || "—"),
+      "",
+      "Please create the record and send them the onboarding invite; they'll enter their own SSN, date of birth, address and direct deposit."
+    ].join("\n");
+  }
+  $("#n-add") && $("#n-add").addEventListener("click", function(){
+    var p = newHire();
+    if (!p){ $("#n-first").focus(); return; }
+    saveStaff(p);
+    ["#n-first","#n-last","#n-email","#n-phone","#n-role","#n-rate","#n-ot","#n-start","#n-mgr","#n-pid","#n-id"].forEach(function(x){ var el=$(x); if(el) el.value = ""; });
+    $("#n-add").textContent = "Send to owner";
+    $("#n-msg").textContent = IS_OWNER
+      ? "Added — " + p.name + " is on the staff list."
+      : "Sent — the owner has " + p.name + "'s details and will set up Paychex. Pay details are now hidden.";
+  });
+  $("#staff-all") && $("#staff-all").addEventListener("change", renderStaff);
+  $("#n-copy") && $("#n-copy").addEventListener("click", function(){
+    var p = newHire();
+    if (!p){ $("#n-first").focus(); return; }
+    navigator.clipboard.writeText(hireText(p)).then(function(){
+      $("#n-msg").textContent = "Copied — paste it into Paychex or send it to your specialist.";
+    });
+  });
+  $("#copy").addEventListener("click", function(){
+    navigator.clipboard.writeText(summaryText()).then(function(){
+      $("#status").textContent = "Summary copied";
+      setTimeout(renderTotals, 1600);
+    });
+  });
+  $("#csv").addEventListener("click", function(){
+    var R = rules(), t = totals();
+    var lines = ["Employee,Office,Regular,Overtime,Holiday,Vacation/PTO,Other,Other Type,Notes"];
+    Object.keys(t).sort().forEach(function(n){
+      var e = t[n], tot = roundHrs(e.total, R.round), ot = 0;
+      Object.keys(e.weeks).forEach(function(w){ var h = roundHrs(e.weeks[w], R.round); if (h > R.ot) ot += h - R.ot; });
+      var by2 = (otherHrs[n] && otherHrs[n].by) || {};
+      var hol2 = by2["Holiday"] || 0, vac2 = (by2["Vacation"]||0) + (by2["PTO"]||0);
+      var rest2 = Object.keys(by2).filter(function(k){ return ["Holiday","Vacation","PTO"].indexOf(k) < 0; });
+      var offs2 = Object.keys((t[n].offices)||{}).map(function(o){ return OFFICES[o]||o; }).join(" + ");
+      lines.push('"'+n+'","'+offs2+'",'+(tot-ot).toFixed(2)+','+ot.toFixed(2)+','+hol2.toFixed(2)+','+vac2.toFixed(2)+
+        ','+rest2.reduce(function(a,k){ return a + by2[k]; },0).toFixed(2)+
+        ',"'+rest2.join("/")+'","'+(notes[n]||[]).join("; ")+'"');
+    });
+    var blob = new Blob([lines.join("\n")], { type:"text/csv" });
+    var a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "payroll-" + OFFICES[$("#office").value].toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"") + ".csv";
+    a.click();
+  });
+  $("#approve").addEventListener("click", function(){
+    $("#status").textContent = "Approved " + new Date().toLocaleString();
+    window.print();
+  });
+
+  /* ---------- persistence (this browser only) ---------- */
+  function save(){
+    try{
+      localStorage.setItem("payroll:" + $("#office").value, JSON.stringify({
+        rows: rows.map(function(r){ return { emp:r.emp, d: r.date ? r.date.getTime() : null, inT:r.inT, outT:r.outT, mins:r.mins, key:r.key }; }),
+        adjust:adjust, excluded:excluded, notes:notes, extras:extras,
+        earlyApproved:earlyApproved, otApproved:otApproved, missingHandled:missingHandled, partialOk:partialOk,
+        period: $("#period").value
+      }));
+    }catch(e){}
+    pushSheets(); pushDecisions();
+  }
+  function load(){
+    try{
+      var raw = localStorage.getItem("payroll:" + $("#office").value);
+      if (!raw) { rows = []; ["#s-flags","#s-totals","#foot"].forEach(hide); return; }
+      var d = JSON.parse(raw);
+      rows = (d.rows||[]).map(function(r){
+        var dt = r.d ? new Date(r.d) : null;
+        return { emp:r.emp, date:dt, day: dt ? DAYS[dt.getDay()] : "", inT:r.inT, outT:r.outT, mins:r.mins, key:r.key };
+      });
+      adjust = d.adjust||{}; excluded = d.excluded||{}; notes = d.notes||{}; extras = d.extras||[];
+      earlyApproved = d.earlyApproved||{}; otApproved = d.otApproved||{};
+      missingHandled = d.missingHandled||{}; partialOk = d.partialOk||{};
+      $("#period").value = d.period || "";
+      if (rows.length) build();
+    }catch(e){}
+  }
+
+  /* ---------- shared storage across office managers ---------- */
+  /** Bumped whenever the timecard parser changes. Anything stored by an older
+   *  build is discarded rather than reloaded, so a parsing fix actually takes
+   *  effect instead of stale rows coming back. */
+  var PARSER_VERSION = 9;
+  var MY_OFFICES = [];
+  var lastPeriodNames = {};
+  var DB = null, ME = null, IS_OWNER = false, MANAGER = false, remote = {}, periodKey = "", unsub = [];
+
+  function pkey(){
+    var p = norm($("#period").value) || "current";
+    return p.replace(/[^A-Za-z0-9_.~:@+-]/g, "-").slice(0, 60) || "current";
+  }
+  function serialRows(list){
+    return list.map(function(r){
+      return { emp:r.emp, d: r.date ? r.date.getTime() : null, inT:r.inT, outT:r.outT,
+               mins:r.mins, key:r.key, office:r.office || null,
+               unlabeled: !!r.unlabeled, unreadable: !!r.unreadable,
+               note: r.note || "", v: PARSER_VERSION };
+    });
+  }
+  function hydrate(list){
+    var stale = (list||[]).some(function(r){ return (r.v || 0) < PARSER_VERSION; });
+    if (stale){
+      say("These timecards were read by an older version. Drop the files in again to re-read them.", true);
+      return [];
+    }
+    return (list||[]).map(function(r){
+      var dt = r.d ? new Date(r.d) : null;
+      return { emp:r.emp, date:dt, day: dt ? DAYS[dt.getDay()] : "", inT:r.inT, outT:r.outT,
+               mins:r.mins, key:r.key, office:r.office, unlabeled:r.unlabeled,
+               unreadable:r.unreadable, note:r.note };
+    });
+  }
+
+  var API = { role:null, office:null };
+  function token(){ try { return localStorage.getItem("payroll:token") || ""; } catch(e){ return ""; } }
+  function setToken(t){ try { t ? localStorage.setItem("payroll:token", t) : localStorage.removeItem("payroll:token"); } catch(e){} }
+
+  /* ── Backend ──────────────────────────────────────────────
+     Behind the Cloudflare Worker this is just "/api" — same origin, so the
+     browser sends no preflight and the Apps Script URL stays private.
+     Serving this file straight from GitHub Pages instead? Replace "/api"
+     with your Apps Script /exec URL. */
+  var ENDPOINT = "/api";
+
+  async function call(action, payload){
+    var body = Object.assign({ action: action, token: token() }, payload || {});
+    var r = await fetch(ENDPOINT, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify(body),
+      redirect: "follow"
+    });
+    var j = await r.json();
+    if (!j.ok && j.error === "auth"){ setToken(""); showLogin(); throw new Error("auth"); }
+    return j;
+  }
+
+  async function initShared(){
+    if (!token()){ showLogin(); return; }
+    var me = await call("bootstrap").catch(function(){ return { ok:false }; });
+    if (!me || !me.ok){ showLogin(); return; }
+    API = me; IS_OWNER = me.role === "owner";
+    if (me.offices){
+      Object.keys(OFFICES).forEach(function(k){ delete OFFICES[k]; });
+      Object.keys(me.offices).forEach(function(k){ OFFICES[k] = me.offices[k].name; LEGAL[k] = me.offices[k].legal; });
+    }
+    var sel = $("#office");
+    sel.innerHTML = Object.keys(OFFICES).map(function(c){ return '<option value="'+c+'">'+esc(OFFICES[c])+'</option>'; }).join("") +
+      '<option value="__all">People at more than one office</option>' +
+      '<option value="__staff">Staff &amp; onboarding</option>';
+    var mine = me.mine || (me.office ? [me.office] : []);
+    if (me.role === "manager" && mine.length){
+      // only the offices this person actually covers
+      sel.innerHTML = mine.map(function(c){
+        return '<option value="'+c+'">'+esc(OFFICES[c])+'</option>';
+      }).join("") + '<option value="__staff">New hire</option>';
+      sel.value = mine[0];
+      sel.disabled = false;
+      MY_OFFICES = mine;
+    } else if (me.office) {
+      sel.value = me.office;
+    }
+    if (me.role === "manager") applyManagerView();
+    if (me.role === "manager"){
+      var th = $("#totals-h"); if (th) th.textContent = "The hours you're sending";
+      var ts = $("#totals-sub");
+      if (ts) ts.textContent = "Straight from the timecards. Check anything that looks wrong before you finish.";
+    }
+    if (me.period && !$("#period").value) $("#period").value = me.period;
+    if (me.status) periodStatus = me.status;
+    if (me.name) $("#sync").textContent = me.name + (IS_OWNER ? "" : " · " + (OFFICES[me.office]||""));
+    DB = true;
+    $("#sync").textContent = IS_OWNER ? "Signed in as owner" : OFFICES[me.office] || "";
+    await pullAll();
+    await loadStaff();
+    if (rows.length) build();
+  }
+
+  function applyManagerView(){
+    // an office manager needs to do one job: hand in this period's cards.
+    // She keeps a read-only view of her own hours — hiding rates is the point,
+    // hiding hours just removes her chance to spot an obvious error.
+    ["#s-offices","#foot","#s-combined","#owner-other"].forEach(function(x){
+      var el = $(x); if (el) el.classList.add("hide");
+    });
+    var rules = document.querySelector("details.rules"); if (rules) rules.style.display = "none";
+    var per = $("#period"); if (per) per.readOnly = true;
+    var reset = $("#reset"); if (reset) reset.style.display = "none";
+    var sel = $("#office");
+    if (sel) sel.style.maxWidth = "none";
+    MANAGER = true;
+  }
+
+  function showLogin(){
+    document.body.innerHTML =
+      '<div style="max-width:380px;margin:14vh auto;padding:0 24px;font-family:var(--sans)">'+
+      '<h1 style="font-family:var(--sans);font-size:22px;font-weight:600;margin-bottom:6px">Payroll Review</h1>'+
+      '<p style="color:var(--slate);font-size:14px;margin-bottom:20px">Enter your office code to continue.</p>'+
+      '<input id="code" type="password" placeholder="Code" style="width:100%;border:1px solid var(--rule-strong);border-radius:3px;padding:13px 14px;font-size:16px">'+
+      '<button id="go" style="width:100%;margin-top:10px;background:var(--ink);color:#fff;border:none;padding:13px;border-radius:3px;font-weight:500;cursor:pointer">Continue</button>'+
+      '<p id="err" style="color:var(--alert);font-size:14px;margin-top:10px;min-height:1.2em"></p></div>';
+    var go = function(){
+      document.getElementById("err").textContent = "Checking…";
+      document.getElementById("err").textContent = "Checking…";
+      fetch(ENDPOINT, { method:"POST", headers:{ "Content-Type":"text/plain;charset=utf-8" },
+        body: JSON.stringify({ action:"login", code: document.getElementById("code").value }),
+        redirect:"follow" })
+        .then(function(r){ return r.json(); })
+        .then(function(j){
+          if (j.ok){ setToken(j.token); location.reload(); }
+          else document.getElementById("err").textContent = j.error || "That code didn't work.";
+        })
+        .catch(function(){
+          document.getElementById("err").textContent =
+            "Couldn't reach the server. If this is a fresh install, check the Worker's SCRIPT_URL.";
+        });
+    };
+    document.getElementById("go").addEventListener("click", go);
+    document.getElementById("code").addEventListener("keydown", function(e){ if (e.key === "Enter") go(); });
+    document.getElementById("code").focus();
+  }
+
+  async function pullAll(){
+    periodKey = pkey();
+    try {
+      var s1 = await call("getPeriod", { period: periodKey });
+      remote = s1.sheets || {};
+      lastPeriodNames = s1.lastPeriod || {};
+      periodStatus = s1.status || periodStatus;
+      var d1 = s1.decisions || {};
+      if (d1 && d1.adjust) {
+        adjust = d1.adjust || adjust; excluded = d1.excluded || excluded;
+        notes = d1.notes || notes; extras = d1.extras || extras;
+        earlyApproved = d1.earlyApproved || earlyApproved; otApproved = d1.otApproved || otApproved;
+        missingHandled = d1.missingHandled || missingHandled; partialOk = d1.partialOk || partialOk;
+        wrapUp = d1.wrapUp || wrapUp; otLog = d1.otLog || otLog;
+        holidayWorked = d1.holidayWorked || holidayWorked; vacApproved = d1.vacApproved || vacApproved;
+        answers = d1.answers || answers; answered = d1.answered || answered;
+        answeredKeys = d1.answeredKeys || answeredKeys; proposals = d1.proposals || proposals;
+      }
+      mergeRemote();
+      await loadStaff();
+    } catch(e){}
+  }
+
+  function subscribe(){
+    if (!DB) return;
+    unsub.forEach(function(f){ try{ f(); }catch(e){} });
+    unsub = [];
+    periodKey = pkey();
+    var stop1 = DB.collection("sheets").onSnapshot(function(snap){
+      remote = {};
+      snap.docs.forEach(function(d){
+        var v = d.data() || {};
+        if (v.period !== periodKey) return;
+        remote[v.office] = v;
+      });
+      mergeRemote();
+    }, function(){ $("#sync").textContent = "Working offline — this office only"; });
+    var stop2 = DB.doc("decisions/" + periodKey).onSnapshot(function(d){
+      var v = d.exists ? d.data() : null;
+      if (!v) return;
+      adjust = v.adjust || adjust; excluded = v.excluded || excluded;
+      notes = v.notes || notes; extras = v.extras || extras;
+      earlyApproved = v.earlyApproved || earlyApproved; otApproved = v.otApproved || otApproved;
+      missingHandled = v.missingHandled || missingHandled; partialOk = v.partialOk || partialOk;
+      if (rows.length) build();
+    }, function(){});
+    unsub.push(stop1, stop2);
+  }
+
+  function mergeRemote(){
+    var mine = $("#office").value;
+    var merged = [];
+    Object.keys(remote).forEach(function(off){
+      merged = merged.concat(hydrate(remote[off].rows));
+    });
+    // keep unsaved local rows for this office if the server hasn't seen them yet
+    var haveOffices = Object.keys(remote);
+    rows.filter(function(r){ return r.office === mine && haveOffices.indexOf(mine) < 0; })
+        .forEach(function(r){ merged.push(r); });
+    rows = merged;
+    renderOffices();
+    if (rows.length) build();
+  }
+
+  var pushTimer = null;
+  async function pushSheets(){
+    if (!DB) return;
+    var mine = $("#office").value;
+    if (mine === "__all" || mine === "__staff") return;
+    var mineRows = rows.filter(function(r){ return (r.office || mine) === mine; });
+    try {
+      var unresolved = flags.filter(function(f){
+        return f.type === "missing-person" || f.hard;
+      }).length + Object.keys(proposals).filter(function(k){
+        return proposals[k].status === "awaiting owner";
+      }).length;
+      var res = await call("putSheet", { period: periodKey, office: mine,
+                                         rows: serialRows(mineRows), unresolved: unresolved });
+      if (res && res.outcome === "correction"){
+        say("Saved as a corrected version (v" + res.version + "). The owner has been told, and any approval for this period has been reopened.");
+      }
+    } catch(e){ $("#sync").textContent = "Not saved — check your connection"; }
+  }
+  async function pushDecisions(){
+    if (!DB) return;
+    clearTimeout(pushTimer);
+    pushTimer = setTimeout(function(){
+      call("putDecisions", { period: periodKey, decisions: {
+        adjust:adjust, excluded:excluded, notes:notes, extras:extras,
+        earlyApproved:earlyApproved, otApproved:otApproved,
+        missingHandled:missingHandled, partialOk:partialOk, wrapUp:wrapUp, otLog:otLog,
+        holidayWorked:holidayWorked, vacApproved:vacApproved,
+        answers:answers, answered:answered, answeredKeys:answeredKeys,
+        proposals:proposals } }).catch(function(){});
+    }, 600);
+  }
+
+  var periodStatus = {};
+  var STATUS_WORDS = {
+    "submitted": "Submitted — waiting on the owner to review",
+    "needs owner": "Needs the owner: unresolved items",
+    "approved": "Approved by the owner",
+    "exported": "Exported for Paychex",
+    "entered in Paychex": "Entered in Paychex — done"
+  };
+
+  function renderPeriodStatus(){
+    var box = $("#period-status");
+    if (!box || !IS_OWNER) { if (box) box.classList.add("hide"); return; }
+    var codes = Object.keys(OFFICES);
+    box.innerHTML = '<table><thead><tr><th>Office</th><th>Where it stands</th>'+
+      '<th class="n">Unresolved</th><th></th></tr></thead><tbody>'+
+      codes.map(function(c){
+        var st = periodStatus[c] || {};
+        var stale = st.exportStale;
+        return '<tr'+(stale?' class="ot"':'')+'><td>'+esc(OFFICES[c])+'</td>'+
+          '<td>'+esc(STATUS_WORDS[st.status] || "Nothing submitted yet")+
+            (stale ? ' <span class="badge">export out of date</span>' : '')+'</td>'+
+          '<td class="n">'+(st.unresolved || 0)+'</td>'+
+          '<td>'+ (st.status ? STATUSES_NEXT(c, st.status) : '') +'</td></tr>';
+      }).join("")+'</tbody></table>';
+    box.classList.remove("hide");
+    box.querySelectorAll("[data-next]").forEach(function(b){
+      b.addEventListener("click", function(){
+        var office = b.getAttribute("data-office"), next = b.getAttribute("data-next");
+        call("setStatus", { period: periodKey, office: office, fields: { status: next, exportStale: false } })
+          .then(function(r){ periodStatus = (r && r.status) || periodStatus; renderPeriodStatus(); })
+          .catch(function(){});
+      });
+    });
+  }
+
+  function STATUSES_NEXT(office, current){
+    var next = { "submitted":"approved", "needs owner":"approved",
+                 "approved":"exported", "exported":"entered in Paychex" }[current];
+    if (!next) return "";
+    var label = { "approved":"Approve", "exported":"Mark exported", "entered in Paychex":"Mark entered" }[next];
+    return '<button class="act" data-office="'+office+'" data-next="'+next+'" style="padding:4px 10px;font-size:13px">'+label+'</button>';
+  }
+
+  function renderOwnerQueue(){
+    var box = $("#owner-queue");
+    if (!box) return;
+    if (!IS_OWNER){ box.classList.add("hide"); box.innerHTML = ""; return; }
+    var waiting = staff.filter(function(p){
+      return String(p.onboarding || "") === "yes" && (p.steps||[]).indexOf("Added in Paychex") < 0;
+    });
+    if (!waiting.length){ box.classList.add("hide"); box.innerHTML = ""; return; }
+    box.innerHTML = '<div style="font-weight:600;margin-bottom:4px">Waiting for you to set up in Paychex</div>'+
+      '<p style="color:var(--slate);font-size:13.5px;margin-bottom:12px">Everything the office manager sent. Copy it into Paychex, create the record, send the invite, then tick it off.</p>'+
+      waiting.map(function(p){
+        return '<div style="padding:12px 0;border-top:1px solid rgba(21,42,69,.12)">'+
+          '<div style="font-weight:600">'+esc(p.name)+' <span style="font-weight:400;color:var(--slate);font-size:13px">'+esc(OFFICES[p.office]||"")+'</span></div>'+
+          '<div style="font-size:14px;margin-top:4px">'+esc(p.role||"—")+' · '+esc(p.status||"")+' · '+
+            '<span class="num" style="font-weight:600">'+esc(p.rate||"—")+'</span> '+esc((p.type||"").toLowerCase())+
+            (p.otRate ? ' (OT '+esc(p.otRate)+')' : '')+
+            (p.start ? ' · starts '+esc(p.start) : '')+'</div>'+
+          '<div style="font-size:13.5px;color:var(--slate);margin-top:3px">'+esc(p.email||"no email")+
+            (p.phone ? ' · '+esc(p.phone) : '')+'</div>'+
+          '<div class="acts" style="margin-top:9px">'+
+            '<button class="act pick" data-cp="'+esc(staffKey(p))+'">Copy for Paychex</button>'+
+            '<button class="act" data-done="'+esc(staffKey(p))+'">Set up in Paychex ✓</button>'+
+          '</div></div>';
+      }).join("");
+    box.classList.remove("hide");
+    box.querySelectorAll("[data-cp]").forEach(function(b){
+      b.addEventListener("click", function(){
+        var p = staff.find(function(x){ return staffKey(x) === b.getAttribute("data-cp"); });
+        if (!p) return;
+        navigator.clipboard.writeText(hireText(p)).then(function(){ b.textContent = "Copied"; setTimeout(function(){ b.textContent = "Copy for Paychex"; }, 1400); });
+      });
+    });
+    box.querySelectorAll("[data-done]").forEach(function(b){
+      b.addEventListener("click", function(){
+        var p = staff.find(function(x){ return staffKey(x) === b.getAttribute("data-done"); });
+        if (!p) return;
+        p.steps = p.steps || [];
+        if (p.steps.indexOf("Added in Paychex") < 0) p.steps.push("Added in Paychex");
+        saveStaff(p);
+      });
+    });
+  }
+
+  function renderHireAlert(){
+    var box = $("#hire-alert");
+    if (!box) return;
+    var mine = $("#office").value;
+    var news = staff.filter(function(p){
+      return p.office === mine && String(p.onboarding || "") === "yes" &&
+             (p.steps || []).length < STEPS.length;
+    });
+    if (!news.length){ box.classList.add("hide"); box.innerHTML = ""; return; }
+    box.innerHTML = news.map(function(p){
+      var left = STEPS.filter(function(st){ return (p.steps||[]).indexOf(st) < 0; });
+      return '<div style="border:1px solid var(--flag);background:var(--flag-bg);border-radius:4px;padding:14px 16px;margin-bottom:10px">'+
+        '<div style="font-weight:600">'+esc(p.name)+' — '+esc(p.role||"new hire")+
+          (p.start ? ', starts '+esc(p.start) : '')+'</div>'+
+        (IS_OWNER
+          ? '<div style="margin-top:5px;font-size:15px">Pay: <span class="num" style="font-weight:600">'+
+            esc(p.rate || "—")+'</span> '+esc((p.type||"Hourly").toLowerCase())+
+            (p.otRate ? ' · overtime <span class="num">'+esc(p.otRate)+'</span>' : '')+
+            (p.status ? ' · '+esc(p.status) : '')+'</div>'
+          : '<div style="margin-top:5px;font-size:14px;color:var(--slate)">'+esc(p.status||"")+
+            ' · pay details sent to the owner</div>')+
+        '<div style="margin-top:7px;font-size:13.5px;color:var(--slate)">Still to do: '+esc(left.join(", "))+'</div>'+
+        '</div>';
+    }).join("");
+    box.classList.remove("hide");
+  }
+
+  function renderOffices(){
+    var box = $("#offices");
+    if (!box) return;
+    var sec = $("#s-offices");
+    if (sec) sec.classList.toggle("hide", !IS_OWNER);
+    box.innerHTML = Object.keys(OFFICES).map(function(code){
+      var mine = $("#office").value === code;
+      var r = remote[code];
+      var localCount = rows.filter(function(x){ return x.office === code; }).length;
+      var n = r ? r.count : localCount;
+      var state = n ? n + " punches" : "waiting";
+      return '<div class="cell '+(n ? "good" : "")+'">'+
+        '<div class="k">'+esc(OFFICES[code])+(mine ? " · yours" : "")+'</div>'+
+        '<div class="v" style="font-size:16px">'+state+'</div></div>';
+    }).join("");
+  }
+
+  /* ---------- staff roster ---------- */
+  var staff = [];
+  var STEPS = ["Offer accepted","Added in Paychex","Paychex onboarding link sent","New hire finished their part","I-9 verified","Added to time clock","First day scheduled"];
+
+  function staffKey(p){ return (p.name||"").toLowerCase().replace(/[^a-z0-9]+/g,"-").slice(0,60) || "x"; }
+
+  async function loadStaff(){
+    try {
+      var r = await call("getStaff");
+      staff = r.staff || [];
+      IS_OWNER = !!r.canSeePay;
+    } catch(e){ staff = []; }
+    renderStaff();
+  }
+  async function saveStaff(p){
+    try {
+      await call("putStaff", { person: p });
+      await loadStaff();
+    } catch(e){}
+  }
+
+  function renderStaff(){
+    var w = $("#staff-all-wrap"); if (w) w.style.display = IS_OWNER ? "inline-flex" : "none";
+    var tbl = $("#staff-table"); if (tbl && tbl.parentElement) tbl.parentElement.style.display = IS_OWNER ? "" : "none";
+    var byOff = {};
+    staff.forEach(function(p){ (byOff[p.office] = byOff[p.office] || []).push(p); });
+    var html = '<thead><tr><th>Name</th><th>Office</th><th>Role</th>' +
+      (IS_OWNER ? '<th class="n">Rate</th>' : '') +
+      '<th>Paid as</th><th class="n">Paychex ID</th><th>Timecard</th><th></th></tr></thead><tbody>';
+    if (!staff.length) html += '<tr><td colspan="8" style="color:var(--slate)">Nobody added yet. Add your team once and every period gets easier.</td></tr>';
+    var showAll = IS_OWNER && $("#staff-all") && $("#staff-all").checked;
+    var mineOff = $("#office").value;
+    staff.slice().filter(function(p){ return showAll || p.office === mineOff || mineOff === "__staff"; })
+      .sort(function(a,b){ return (a.office+a.name).localeCompare(b.office+b.name); }).forEach(function(p){
+      html += '<tr><td>'+esc(p.name)+(p.email?'<div style="font-size:12.5px;color:var(--slate)">'+esc(p.email)+'</div>':'')+
+        '</td><td>'+esc(OFFICES[p.office]||p.office||"")+'</td><td>'+esc(p.role||"")+
+        '</td>'+(IS_OWNER ? '<td class="n">'+(p.rate?esc(p.rate):"—")+'</td>' : '')+
+        '<td>'+esc(p.type||"Hourly")+'</td>'+
+        '<td class="n">'+esc(p.payroll_id||"—")+'</td>'+
+        '<td style="font-size:13px;color:'+(String(p.timecard||"yes")==="no" ? "var(--slate)" : "var(--ink)")+'">'+
+          (String(p.timecard||"yes")==="no" ? "not expected" : "expected")+'</td>'+
+        '<td><button class="act" data-ed="'+esc(p.id||staffKey(p))+'" style="padding:4px 9px;font-size:13px">Edit</button> '+
+        (IS_OWNER ? '<button class="act" data-cp="'+esc(staffKey(p))+'" style="padding:4px 9px;font-size:13px">Copy</button> ' : '')+
+        '<button class="act" data-rm="'+esc(p.id||staffKey(p))+'" style="padding:4px 9px;font-size:13px">Left</button></td></tr>';
+    });
+    html += '</tbody>';
+    $("#staff-table").innerHTML = html;
+    $("#staff-table").querySelectorAll("[data-ed]").forEach(function(b){
+      b.addEventListener("click", function(){
+        var p = staff.find(function(x){ return (x.id || staffKey(x)) === b.getAttribute("data-ed"); });
+        if (!p) return;
+        $("#n-id").value   = p.id || "";
+        $("#n-first").value = p.first || (p.name||"").split(" ")[0] || "";
+        $("#n-last").value  = p.last  || (p.name||"").split(" ").slice(-1)[0] || "";
+        $("#n-email").value = p.email || "";
+        $("#n-phone").value = p.phone || "";
+        $("#n-office").value = p.office || $("#n-office").value;
+        $("#n-role").value  = p.role || "";
+        $("#n-status").value = p.status || "Full time";
+        $("#n-type").value  = p.type || "Hourly";
+        if (IS_OWNER){ $("#n-rate").value = p.rate || ""; $("#n-ot").value = p.otRate || ""; }
+        $("#n-start").value = p.start || "";
+        $("#n-mgr").value   = p.mgr || "";
+        $("#n-pid").value   = p.payroll_id || "";
+        $("#n-tc").value    = String(p.timecard||"yes") === "no" ? "no"
+                            : (String(p.occasional||"") === "yes" ? "occasional" : "yes");
+        fillPaidBy(p.paid_by || p.office);
+        $("#n-add").textContent = "Save changes";
+        $("#n-msg").textContent = "Editing " + p.name + ".";
+        window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
+      });
+    });
+    $("#staff-table").querySelectorAll("[data-cp]").forEach(function(b){
+      b.addEventListener("click", function(){
+        var p = staff.find(function(x){ return staffKey(x) === b.getAttribute("data-cp"); });
+        if (!p) return;
+        navigator.clipboard.writeText(hireText(p)).then(function(){ b.textContent = "Copied"; setTimeout(function(){ b.textContent = "Copy"; }, 1400); });
+      });
+    });
+    $("#staff-table").querySelectorAll("[data-rm]").forEach(function(b){
+      b.addEventListener("click", function(){
+        var id = b.getAttribute("data-rm");
+        var p = staff.find(function(x){ return (x.id || staffKey(x)) === id; });
+        if (!confirm("Mark " + (p ? p.name : "this person") + " as no longer working here? " +
+                     "They stop being expected on timecards. Past hours are kept.")) return;
+        if (p){
+          p.status = "Left " + new Date().toLocaleDateString();
+          p.timecard = "no";
+          saveStaff(p);
+          return;
+        }
+        call("deleteStaff", { id: id }).then(loadStaff).catch(function(){});
+      });
+    });
+
+    var pending = staff.filter(function(p){
+      return String(p.onboarding || "") === "yes" && (p.steps||[]).length < STEPS.length;
+    });
+    $("#onboard-list").innerHTML = pending.length ? pending.map(function(p){
+      var done = p.steps || [];
+      return '<div style="padding:12px 0;border-top:1px solid var(--rule)">'+
+        '<div style="font-weight:600;margin-bottom:8px">'+esc(p.name)+' <span style="font-weight:400;color:var(--slate);font-size:13px">'+esc(OFFICES[p.office]||"")+(p.start?" · starts "+esc(p.start):"")+'</span></div>'+
+        '<div class="acts">'+ STEPS.map(function(st){
+          var isDone = done.indexOf(st) > -1;
+          return '<button class="act'+(isDone?" done":"")+'" data-step="'+esc(st)+'" data-who="'+esc(staffKey(p))+'">'+(isDone?"✓ ":"")+esc(st)+'</button>';
+        }).join("") + '</div></div>';
+    }).join("") : '<div style="color:var(--slate);font-size:14px">Nobody mid-onboarding.</div>';
+
+    renderOwnerQueue();
+    renderHireAlert();
+    $("#onboard-list").querySelectorAll("[data-step]").forEach(function(b){
+      b.addEventListener("click", function(){
+        var who = b.getAttribute("data-who"), st = b.getAttribute("data-step");
+        var p = staff.find(function(x){ return staffKey(x) === who; });
+        if (!p) return;
+        p.steps = p.steps || [];
+        var i = p.steps.indexOf(st);
+        if (i > -1) p.steps.splice(i,1); else p.steps.push(st);
+        saveStaff(p);
+      });
+    });
+  }
+
+  /* ---------- wiring ---------- */
+  $("#pick").addEventListener("click", function(){ $("#file").click(); });
+  $("#file").addEventListener("change", function(e){
+    Array.prototype.slice.call(e.target.files).forEach(readFile);
+  });
+  var drop = $("#drop");
+  ["dragenter","dragover"].forEach(function(ev){
+    drop.addEventListener(ev, function(e){ e.preventDefault(); drop.classList.add("over"); });
+  });
+  ["dragleave","drop"].forEach(function(ev){
+    drop.addEventListener(ev, function(e){ e.preventDefault(); drop.classList.remove("over"); });
+  });
+  drop.addEventListener("drop", function(e){
+    Array.prototype.slice.call(e.dataTransfer.files).forEach(readFile);
+  });
+  $("#usePaste").addEventListener("click", function(){
+    var txt = $("#paste").value.trim();
+    if (!txt) return;
+    var sep = txt.indexOf("\t") > -1 ? "\t" : ",";
+    ingest(txt.split("\n").map(function(l){ return l.split(sep).map(function(c){ return c.trim(); }); }));
+  });
+  ["#r-round","#r-ot","#r-long","#r-early","#c-1","#c-2","#c-3","#c-4","#c-5","#r-expect","#r-holiday"].forEach(function(s){
+    $(s).addEventListener("change", function(){ if (rows.length) build(); });
+  });
+  $("#office").addEventListener("change", function(){
+    if ($("#office").value === "__staff"){
+      ["#s-upload","#s-offices","#s-flags","#s-totals","#s-combined","#foot"].forEach(hide);
+      $("#s-staff").classList.remove("hide");
+      var os = $("#n-office");
+      if (os && !os.options.length) os.innerHTML = Object.keys(OFFICES).map(function(c){ return '<option value="'+c+'">'+esc(OFFICES[c])+'</option>'; }).join("");
+      fillPaidBy($("#n-office") ? $("#n-office").value : null);
+      if (!IS_OWNER){ ["#fld-pid","#fld-paid"].forEach(function(x){ var el=$(x); if(el) el.style.display="none"; }); }
+      if (MANAGER){
+        var h = $("#staff-h"), sb = $("#staff-sub");
+        if (h) h.textContent = "New hire";
+        if (sb) sb.textContent = "Send the details once and the owner sets them up in Paychex.";
+      }
+      loadStaff();
+      return;
+    }
+    $("#s-staff").classList.add("hide");
+    $("#s-offices").classList.remove("hide");
+    if ($("#office").value === "__all"){
+      ["#s-upload","#s-flags","#s-totals","#foot"].forEach(hide);
+      $("#s-combined").classList.remove("hide");
+      renderCombined();
+      return;
+    }
+    $("#s-combined").classList.add("hide");
+    $("#s-upload").classList.remove("hide");
+    renderOffices();
+    if (!DB) load(); else mergeRemote();
+  });
+  $("#period").addEventListener("change", function(){ pullAll(); save(); });
+  $("#signout") && $("#signout").addEventListener("click", function(){
+    setToken(""); location.reload();
+  });
+  $("#reset").addEventListener("click", function(){
+    if (!confirm("Clear this office's period and start over?")) return;
+    localStorage.removeItem("payroll:" + $("#office").value);
+    rows = []; adjust = {}; excluded = {}; notes = {}; extras = {};
+    earlyApproved = {}; otApproved = {}; missingHandled = {}; partialOk = {};
+    location.reload();
+  });
+
+  renderOffices();
+  initShared();
+})();
+</script>
+</body>
+</html>
