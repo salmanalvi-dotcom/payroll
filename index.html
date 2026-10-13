@@ -152,8 +152,8 @@
   <div class="head-in">
     <div class="mark">Payroll</div>
     <select class="office" id="office">
-      <option value="penn">Fort Worth Dentist</option>
-      <option value="fws">Camp Bowie Dentist</option>
+      <option value="fwd">Fort Worth Dentist</option>
+      <option value="cb">Camp Bowie Dentist</option>
       <option value="arl">Arlington Dental Implants &amp; Cosmetic Dentistry</option>
       <option value="__all">People at more than one office</option>
       <option value="__staff">Staff &amp; onboarding</option>
@@ -400,6 +400,19 @@
   }
   var DAYS = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
   function dstr(d){ return d ? (d.getMonth()+1) + "/" + String(d.getDate()).padStart(2,"0") : "—"; }
+  /** The pay period as two dates, from the "MM.dd.yy-MM.dd.yy" label the server sets. */
+  function periodDates(label){
+    var m = /^(\d\d)\.(\d\d)\.(\d\d)\s*[-–]\s*(\d\d)\.(\d\d)\.(\d\d)$/.exec(norm(label));
+    if (!m) return null;
+    var a = new Date(2000 + +m[3], +m[1]-1, +m[2]), b = new Date(2000 + +m[6], +m[4]-1, +m[5]);
+    b.setHours(23,59,59,999);
+    return { start:a, end:b };
+  }
+  function outOfPeriod(list){
+    var pd = periodDates($("#period").value);
+    if (!pd) return [];
+    return list.filter(function(r){ return r.date && (r.date < pd.start || r.date > pd.end); });
+  }
 
   function detect(headers){
     var map = {};
@@ -848,8 +861,24 @@
     rows = rows.concat(added);
     pendingSheets = [];
     $("#assign").classList.add("hide");
-    say(added.length + " punches loaded from " + Object.keys(seen).length +
-        (Object.keys(seen).length === 1 ? " timecard." : " timecards."));
+    var loadedMsg = added.length + " punches loaded from " + Object.keys(seen).length +
+        (Object.keys(seen).length === 1 ? " timecard." : " timecards.");
+    var outside = outOfPeriod(added);
+    if (outside.length){
+      var ds = outside.map(function(r){ return r.date.getTime(); }).sort(function(a,b){ return a-b; });
+      if (!confirm(outside.length + " of " + added.length + " punches are dated outside the pay period " +
+                   ($("#period").value || "") + " (" + dstr(new Date(ds[0])) + "–" + dstr(new Date(ds[ds.length-1])) + ").\n\n" +
+                   "The pay period is set by the server. If this card is for a different period, Cancel and tell the owner.\n\n" +
+                   "Load them anyway?")){
+        rows = rows.filter(function(r){ return added.indexOf(r) < 0; });
+        say("Not loaded. Check the dates on the card against the pay period shown at the top.", true);
+        return;
+      }
+      say(loadedMsg + " Heads up: " + outside.length + " of them fall outside the pay period " +
+          ($("#period").value || "") + " (" + dstr(new Date(ds[0])) + "–" + dstr(new Date(ds[ds.length-1])) + ").", true);
+    } else {
+      say(loadedMsg);
+    }
     build();
   });
 
@@ -1183,8 +1212,9 @@
   }
 
   /* ---------- render ---------- */
-  var OFFICES = { penn:"Fort Worth Dentist", fws:"Camp Bowie Dentist", arl:"Arlington Dental Implants & Cosmetic Dentistry" };
-  var LEGAL   = { penn:"Worth Dentistry, PLLC", fws:"FWS PLLC", arl:"Arlington Dentistry, PLLC" };
+  // Placeholders until bootstrap replaces them with CONFIG.offices from the server.
+  var OFFICES = { fwd:"Fort Worth Dentist", cb:"Camp Bowie Dentist", arl:"Arlington Dental Implants & Cosmetic Dentistry" };
+  var LEGAL   = { fwd:"Worth Dentistry, PLLC", cb:"FWS PLLC", arl:"Arlington Dentistry, PLLC" };
   function renderCombined(){
     var R = rules();
     var per = {};   // name -> week -> {office: mins}
@@ -2185,7 +2215,7 @@
       var ts = $("#totals-sub");
       if (ts) ts.textContent = "Straight from the timecards. Check anything that looks wrong before you finish.";
     }
-    if (me.period && !$("#period").value) $("#period").value = me.period;
+    if (me.period && (!$("#period").value || me.role === "manager")) $("#period").value = me.period;
     if (me.status) periodStatus = me.status;
     if (me.name) $("#sync").textContent = me.name + (IS_OWNER ? "" : " · " + (OFFICES[me.office]||""));
     DB = true;
@@ -2315,12 +2345,27 @@
       }).length + Object.keys(proposals).filter(function(k){
         return proposals[k].status === "awaiting owner";
       }).length;
+      // Nothing loaded for this office: never send an empty set by accident.
+      if (!mineRows.length){
+        var already = remote[mine] && (remote[mine].rows || []).length;
+        if (!already) return;                       // nothing here, nothing there — no-op
+        if (!confirm("There are no punches loaded for " + (OFFICES[mine] || "this office") +
+                     ", but " + already + " were already sent for this period.\n\n" +
+                     "Send an EMPTY timecard set and replace them?\n" +
+                     "Cancel keeps what was already sent.")) return;
+      }
       var res = await call("putSheet", { period: periodKey, office: mine,
                                          rows: serialRows(mineRows), unresolved: unresolved });
+      var what = mineRows.length + (mineRows.length === 1 ? " punch" : " punches") +
+                 " for " + (OFFICES[mine] || "this office") + " (" + ($("#period").value || periodKey) + ")";
       if (res && res.outcome === "correction"){
-        say("Saved as a corrected version (v" + res.version + "). The owner has been told, and any approval for this period has been reopened.");
+        say("Sent to the owner as a corrected version (v" + res.version + ") — " + what +
+            ". The owner has been told, and any approval for this period has been reopened.");
+      } else if (res && res.outcome === "new"){
+        say("Sent to the owner — " + what + ".");
       }
-    } catch(e){ $("#sync").textContent = "Not saved — check your connection"; }
+      // "identical": nothing changed since the last send, so nothing to announce.
+    } catch(e){ $("#sync").textContent = "Not saved — check your connection"; say("Not sent — check your connection and try again.", true); }
   }
   async function pushDecisions(){
     if (!DB) return;
