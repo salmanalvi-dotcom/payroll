@@ -456,7 +456,7 @@
 
   function parsePdfPage(tokens){
     // tokens: ordered text items for one page (one employee)
-    var out = [], cur = null;
+    var out = [], cur = null, head = [];
     for (var i = 0; i < tokens.length; i++){
       var t = tokens[i].trim();
       if (!t) continue;
@@ -465,7 +465,10 @@
         cur = { date: t, day:"", punches:[], durs:[], adjust:null, note:"" };
         continue;
       }
-      if (!cur) continue;
+      // Everything above the first date row is the card's header — which is
+      // where the clock prints whose card this is. It used to be dropped on
+      // the floor, which is why nothing could ever name a page.
+      if (!cur){ if (head.length < 40) head.push(t); continue; }
       if (PDF_DAY.test(t)){ cur.day = t; continue; }
       if (/^\(Adjust\)$/i.test(t)){ cur.isAdjust = true; continue; }
       if (PDF_TIME.test(t)){ cur.punches.push(t); continue; }
@@ -474,6 +477,7 @@
       if (t.length > 1 && !/^\d+$/.test(t)) cur.note = (cur.note ? cur.note + " " : "") + t;
     }
     if (cur) out.push(cur);
+    out.header = head.join(" ");
     return out;
   }
 
@@ -597,10 +601,14 @@
       var vp = page.getViewport({ scale: 1 });
       var scale = Math.min(2.4, 760 / vp.width);
       var full = page.getViewport({ scale: scale });
-      var stripTop = Math.round(full.height * 0.055);
-      var stripH   = Math.round(full.height * 0.045);
+      // 5.5%-10% of the page was a guess at where the name sits, and on the
+      // Henderson export it lands on whitespace — a blank box to confirm
+      // against. Take the whole top quarter instead; whatever identifies the
+      // card is in there somewhere.
+      var stripTop = Math.round(full.height * 0.02);
+      var stripH   = Math.round(full.height * 0.22);
       var canvas = document.createElement("canvas");
-      canvas.width = Math.round(full.width * 0.55);
+      canvas.width = Math.round(full.width);
       canvas.height = stripH;
       var ctx = canvas.getContext("2d");
       ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -650,6 +658,7 @@
             if (pendingSheets.some(function(o){ return o.sig === sig; })){ return; }
             pendingSheets.push({
               sig: sig,
+              headerText: parsed.header || "",
               strip: pageData.strip || "",
               file: f.name,
               fromMultiPage: pages.length > 1,
@@ -725,6 +734,28 @@
     });
   }
 
+  /** Read the person's name out of the card's own header. Hyphens and
+   *  commas vary, and PDF text extraction often loses the spaces entirely
+   *  ("Farrish,EricK"), so both spaced and run-together forms count. Only
+   *  a single unambiguous hit is used — two names in a header means the
+   *  human still decides. */
+  function nameFromHeader(headerText, roster){
+    if (!norm(headerText)) return "";
+    var h  = " " + lower(headerText).replace(/[^a-z0-9]+/g, " ") + " ";
+    var hz = lower(headerText).replace(/[^a-z]/g, "");
+    var hit = (roster || []).filter(function(n){
+      var w = lower(n).replace(/[^a-z]+/g, " ").split(/\s+/)
+        .filter(function(x){ return x.length > 1; });
+      if (w.length < 2) return false;
+      var first = w[0], last = w[w.length - 1];
+      if (h.indexOf(" " + first + " ") > -1 && h.indexOf(" " + last + " ") > -1) return true;
+      if (hz.indexOf(first + last) > -1 || hz.indexOf(last + first) > -1) return true;
+      return Math.max(first.length, last.length) >= 4 &&
+             hz.indexOf(first) > -1 && hz.indexOf(last) > -1;
+    });
+    return hit.length === 1 ? hit[0] : "";
+  }
+
   function showAssign(){
     if (!pendingSheets.length) return;
     var R = rules();
@@ -736,9 +767,22 @@
       .concat(R.expect)
       .filter(function(v,i,a){ return v && a.indexOf(v) === i; })
       .sort(function(a,b){ return lastName(a).localeCompare(lastName(b)); });
+    // The card's own header beats a filename and beats page order, because
+    // it's the clock saying whose card this is. Both names present as whole
+    // words is not a guess, so it ticks itself.
+    pendingSheets.forEach(function(sh){
+      if (!norm(sh.headerText)) return;
+      var hit = nameFromHeader(sh.headerText, roster);
+      if (hit){ sh.suggested = hit; sh.fromHeader = true; sh.confirmed = true; return; }
+      if (!sh.suggested){
+        var loose = matchRoster(sh.headerText, roster);
+        if (loose){ sh.suggested = loose; sh.guessed = true; }
+      }
+    });
+
     // resolve filename guesses against the real roster before drawing the list
     pendingSheets.forEach(function(sh){
-      if (!sh.suggested) return;
+      if (!sh.suggested || sh.fromHeader) return;
       var hit = matchRoster(sh.suggested, roster);
       if (hit){ sh.suggested = hit; sh.guessed = true; }
     });
@@ -749,12 +793,19 @@
         roster.map(function(n){ return '<option'+(sh.suggested && lower(n)===lower(sh.suggested) ? " selected":"")+'>'+esc(n)+'</option>'; }).join("");
       return '<div class="assign-row" style="padding:12px 0;border-bottom:1px solid var(--rule)">'+
         (sh.strip
-          ? '<img src="'+sh.strip+'" alt="name printed on this timecard" ' +
-            'style="display:block;max-width:100%;height:auto;border:1px solid var(--rule);border-radius:3px;background:#fff;margin-bottom:8px">'
-          : '<div style="font-size:13px;color:var(--alert);margin-bottom:8px">Couldn\'t show the printed name for this one — check the punches below carefully.</div>')+
+          ? '<img src="'+sh.strip+'" alt="top of this timecard" ' +
+            'style="display:block;max-width:100%;height:auto;border:1px solid var(--rule);border-radius:3px;background:#fff;margin-bottom:6px">'
+          : '<div style="font-size:13px;color:var(--alert);margin-bottom:8px">Couldn\'t show the top of this timecard — check the punches below carefully.</div>')+
+        (norm(sh.headerText)
+          ? '<div style="font-family:var(--mono);font-size:12px;color:var(--slate);margin-bottom:8px;' +
+            'white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="'+esc(sh.headerText)+'">'+
+            'read off the card: '+esc(sh.headerText.slice(0,140))+'</div>'
+          : '<div style="font-size:12.5px;color:var(--alert);margin-bottom:8px">'+
+            'No text in this card\'s header — the name is probably drawn, not typed.</div>')+
         '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">'+
           '<label style="display:flex;align-items:center;gap:7px;font-size:14px;font-weight:500">'+
             '<input type="checkbox" class="assign-ok" data-i="'+i+'"'+(sh.confirmed ? " checked" : "")+'> matches</label>'+
+          (sh.fromHeader ? '<span style="font-size:12.5px;color:var(--ok)">named itself</span>' : '')+
           '<select data-i="'+i+'" class="assign-sel" style="border:1px solid '+(sh.confirmed ? "var(--rule-strong)" : "var(--flag)")+';border-radius:3px;padding:8px 10px;min-width:210px;font-weight:500">'+opts+'</select>'+
           '<input class="assign-name'+(roster.length ? " hide" : "")+'" data-i="'+i+'" placeholder="Type the name" value="'+esc(sh.suggested||"")+'" style="border:1px solid var(--rule-strong);border-radius:3px;padding:8px 10px">'+
           '<span style="font-family:var(--mono);font-size:12.5px;color:var(--slate);flex:1 1 220px">'+esc(sh.preview)+'</span>'+
