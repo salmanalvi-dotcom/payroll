@@ -169,6 +169,8 @@
 <main>
 
   <div id="hire-alert" class="hide" style="max-width:1080px;margin:20px auto -8px;padding:0 20px"></div>
+  <div id="period-warn" class="hide" style="max-width:1080px;margin:20px auto -8px;padding:0 20px"></div>
+  <div id="submit-banner" class="hide" style="max-width:1080px;margin:20px auto -8px;padding:0 20px"></div>
 
   <section class="step hide" id="s-offices">
     <div class="ledger" id="offices"></div>
@@ -400,19 +402,6 @@
   }
   var DAYS = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
   function dstr(d){ return d ? (d.getMonth()+1) + "/" + String(d.getDate()).padStart(2,"0") : "—"; }
-  /** The pay period as two dates, from the "MM.dd.yy-MM.dd.yy" label the server sets. */
-  function periodDates(label){
-    var m = /^(\d\d)\.(\d\d)\.(\d\d)\s*[-–]\s*(\d\d)\.(\d\d)\.(\d\d)$/.exec(norm(label));
-    if (!m) return null;
-    var a = new Date(2000 + +m[3], +m[1]-1, +m[2]), b = new Date(2000 + +m[6], +m[4]-1, +m[5]);
-    b.setHours(23,59,59,999);
-    return { start:a, end:b };
-  }
-  function outOfPeriod(list){
-    var pd = periodDates($("#period").value);
-    if (!pd) return [];
-    return list.filter(function(r){ return r.date && (r.date < pd.start || r.date > pd.end); });
-  }
 
   function detect(headers){
     var map = {};
@@ -861,24 +850,8 @@
     rows = rows.concat(added);
     pendingSheets = [];
     $("#assign").classList.add("hide");
-    var loadedMsg = added.length + " punches loaded from " + Object.keys(seen).length +
-        (Object.keys(seen).length === 1 ? " timecard." : " timecards.");
-    var outside = outOfPeriod(added);
-    if (outside.length){
-      var ds = outside.map(function(r){ return r.date.getTime(); }).sort(function(a,b){ return a-b; });
-      if (!confirm(outside.length + " of " + added.length + " punches are dated outside the pay period " +
-                   ($("#period").value || "") + " (" + dstr(new Date(ds[0])) + "–" + dstr(new Date(ds[ds.length-1])) + ").\n\n" +
-                   "The pay period is set by the server. If this card is for a different period, Cancel and tell the owner.\n\n" +
-                   "Load them anyway?")){
-        rows = rows.filter(function(r){ return added.indexOf(r) < 0; });
-        say("Not loaded. Check the dates on the card against the pay period shown at the top.", true);
-        return;
-      }
-      say(loadedMsg + " Heads up: " + outside.length + " of them fall outside the pay period " +
-          ($("#period").value || "") + " (" + dstr(new Date(ds[0])) + "–" + dstr(new Date(ds[ds.length-1])) + ").", true);
-    } else {
-      say(loadedMsg);
-    }
+    say(added.length + " punches loaded from " + Object.keys(seen).length +
+        (Object.keys(seen).length === 1 ? " timecard." : " timecards."));
     build();
   });
 
@@ -1212,7 +1185,6 @@
   }
 
   /* ---------- render ---------- */
-  // Placeholders until bootstrap replaces them with CONFIG.offices from the server.
   var OFFICES = { fwd:"Fort Worth Dentist", cb:"Camp Bowie Dentist", arl:"Arlington Dental Implants & Cosmetic Dentistry" };
   var LEGAL   = { fwd:"Worth Dentistry, PLLC", cb:"FWS PLLC", arl:"Arlington Dentistry, PLLC" };
   function renderCombined(){
@@ -2215,7 +2187,7 @@
       var ts = $("#totals-sub");
       if (ts) ts.textContent = "Straight from the timecards. Check anything that looks wrong before you finish.";
     }
-    if (me.period && (!$("#period").value || me.role === "manager")) $("#period").value = me.period;
+    if (me.period && !$("#period").value) $("#period").value = me.period;
     if (me.status) periodStatus = me.status;
     if (me.name) $("#sync").textContent = me.name + (IS_OWNER ? "" : " · " + (OFFICES[me.office]||""));
     DB = true;
@@ -2334,38 +2306,103 @@
   }
 
   var pushTimer = null;
+  /* ── period boundaries, read off the label the server sent ──
+     The label looks like 09.27.26-10.10.26. Punches that fall outside it
+     are the single most expensive mistake this app can make, so they get
+     said out loud rather than filed quietly. */
+  function periodBounds(){
+    var m = /^(\d\d)\.(\d\d)\.(\d\d)-(\d\d)\.(\d\d)\.(\d\d)$/.exec(norm($("#period").value));
+    if (!m) return null;
+    function d(mo, da, yr){ return new Date(2000 + (+yr), (+mo) - 1, (+da)); }
+    var a = d(m[1], m[2], m[3]), b = d(m[4], m[5], m[6]);
+    b.setHours(23, 59, 59, 999);
+    return (b > a) ? { start: a, end: b } : null;
+  }
+
+  function checkPeriodFit(list){
+    var box = $("#period-warn");
+    if (!box) return 0;
+    var b = periodBounds();
+    var dated = (list || []).filter(function(r){ return r.date; });
+    if (!b || !dated.length){ box.classList.add("hide"); box.innerHTML = ""; return 0; }
+
+    var out = dated.filter(function(r){ return r.date < b.start || r.date > b.end; });
+    if (!out.length){ box.classList.add("hide"); box.innerHTML = ""; return 0; }
+
+    var times = dated.map(function(r){ return r.date.getTime(); });
+    var lo = new Date(Math.min.apply(null, times)), hi = new Date(Math.max.apply(null, times));
+    box.innerHTML =
+      '<div style="border:1px solid var(--alert);background:var(--alert-bg);border-radius:4px;padding:14px 16px">'+
+        '<div style="font-weight:600;color:var(--alert)">'+ out.length +
+          (out.length === 1 ? ' punch is' : ' punches are') + ' outside this pay period</div>'+
+        '<div style="margin-top:5px;font-size:14px">These timecards run '+ esc(dstr(lo)) +' to '+ esc(dstr(hi)) +
+          ', but the period selected is '+ esc(norm($("#period").value)) + '.</div>'+
+        '<div style="margin-top:4px;font-size:13.5px;color:var(--slate)">'+
+          'They will still be submitted. Check you uploaded the right fortnight before you finish.</div>'+
+      '</div>';
+    box.classList.remove("hide");
+    return out.length;
+  }
+
+  function showSubmitted(res, office, list){
+    var box = $("#submit-banner");
+    if (!box) return;
+    var people = {}; (list || []).forEach(function(r){ if (r.emp) people[r.emp] = 1; });
+    var n = Object.keys(people).length;
+    var when = new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    var corrected = res && res.outcome === "correction";
+    box.innerHTML =
+      '<div style="border:1px solid '+(corrected ? "var(--flag)" : "var(--ok)")+
+        ';background:'+(corrected ? "var(--flag-bg)" : "var(--panel)")+';border-radius:4px;padding:14px 16px">'+
+        '<div style="font-weight:600;color:'+(corrected ? "var(--ink)" : "var(--ok)")+'">'+
+          (corrected ? 'Replacement sent to the owner — version ' + esc(String(res.version))
+                     : 'Sent to the owner') + '</div>'+
+        '<div style="margin-top:5px;font-size:14px">'+
+          esc(OFFICES[office] || office) + ' · ' + esc(norm($("#period").value)) + ' · ' +
+          (list || []).length + ' punch rows, ' + n + (n === 1 ? ' person' : ' people') +
+          ' · ' + esc(when) + '</div>'+
+        (corrected
+          ? '<div style="margin-top:4px;font-size:13.5px;color:var(--slate)">Any approval for this period has been reopened.</div>'
+          : '<div style="margin-top:4px;font-size:13.5px;color:var(--slate)">The owner has the punches exactly as the clock recorded them.</div>')+
+      '</div>';
+    box.classList.remove("hide");
+  }
+
+  var emptyPushOk = {};
   async function pushSheets(){
     if (!DB) return;
     var mine = $("#office").value;
     if (mine === "__all" || mine === "__staff") return;
     var mineRows = rows.filter(function(r){ return (r.office || mine) === mine; });
+
+    // Nothing to send is not a submission. Sending it anyway is how an empty
+    // payroll document reached the owner on 28 Sep.
+    if (!mineRows.length){
+      var already = (remote && remote[mine] && Number(remote[mine].count || 0) > 0);
+      if (!already) return;                       // nothing here, nothing there — stay quiet
+      if (!emptyPushOk[mine]){
+        if (!confirm("This will replace " + (OFFICES[mine] || mine) + "'s timecards for " +
+                     norm($("#period").value) + " with an EMPTY submission.\n\n" +
+                     "The owner will receive a payroll document with no punches in it.\n\n" +
+                     "Send it anyway?")) return;
+        emptyPushOk[mine] = true;
+      }
+    } else { emptyPushOk[mine] = false; }
+
+    checkPeriodFit(mineRows);
+
     try {
       var unresolved = flags.filter(function(f){
         return f.type === "missing-person" || f.hard;
       }).length + Object.keys(proposals).filter(function(k){
         return proposals[k].status === "awaiting owner";
       }).length;
-      // Nothing loaded for this office: never send an empty set by accident.
-      if (!mineRows.length){
-        var already = remote[mine] && (remote[mine].rows || []).length;
-        if (!already) return;                       // nothing here, nothing there — no-op
-        if (!confirm("There are no punches loaded for " + (OFFICES[mine] || "this office") +
-                     ", but " + already + " were already sent for this period.\n\n" +
-                     "Send an EMPTY timecard set and replace them?\n" +
-                     "Cancel keeps what was already sent.")) return;
-      }
       var res = await call("putSheet", { period: periodKey, office: mine,
                                          rows: serialRows(mineRows), unresolved: unresolved });
-      var what = mineRows.length + (mineRows.length === 1 ? " punch" : " punches") +
-                 " for " + (OFFICES[mine] || "this office") + " (" + ($("#period").value || periodKey) + ")";
-      if (res && res.outcome === "correction"){
-        say("Sent to the owner as a corrected version (v" + res.version + ") — " + what +
-            ". The owner has been told, and any approval for this period has been reopened.");
-      } else if (res && res.outcome === "new"){
-        say("Sent to the owner — " + what + ".");
+      if (res && (res.outcome === "new" || res.outcome === "correction")){
+        showSubmitted(res, mine, mineRows);
       }
-      // "identical": nothing changed since the last send, so nothing to announce.
-    } catch(e){ $("#sync").textContent = "Not saved — check your connection"; say("Not sent — check your connection and try again.", true); }
+    } catch(e){ $("#sync").textContent = "Not saved — check your connection"; }
   }
   async function pushDecisions(){
     if (!DB) return;
@@ -2702,6 +2739,236 @@
   renderOffices();
   initShared();
 })();
+
+
+/* ───────────────────────────────────────────────────────────────────────
+   REMEMBER WHO EACH TIMECARD BELONGS TO
+
+   Paste this block into index.html immediately BEFORE the closing
+   script tag — after everything else is defined. It doesn't replace
+   any existing function; it wraps showAssign() and adds one listener.
+   If anything in it fails, the assign step behaves exactly as it does
+   today.
+
+   Why the step exists at all
+   -------------------------
+   The clock draws the employee's name as vector art, so pdf.js can't
+   read it as text. guessByOrder() guesses from page order, and its own
+   comment says why that can't be trusted on its own: one missing page
+   shifts every match after it. For payroll that's not a nuisance, it's
+   paying the wrong person.
+
+   What this does instead
+   ----------------------
+   The first time you match a printed name to a person, it fingerprints
+   that picture and remembers the pairing. Next period the same card
+   matches itself — not by order, not by filename, by the image the
+   clock actually printed. That's the human confirmation being reused,
+   so it's evidence rather than a new guess.
+
+   After one period the step should ask about new hires only.
+
+   The fingerprint ignores the right-hand side of the strip, because
+   that's where clocks usually print the pay period, which changes
+   every time. It's also coarse on purpose — small rendering
+   differences shouldn't break a match, and a near-match on a 96-bit
+   grid is not something two different names do by accident.
+   ─────────────────────────────────────────────────────────────────── */
+(function () {
+  var STORE = "payroll:knownNames";
+
+  function recall() {
+    try { return JSON.parse(localStorage.getItem(STORE) || "{}"); }
+    catch (e) { return {}; }
+  }
+  function remember(map) {
+    try { localStorage.setItem(STORE, JSON.stringify(map)); } catch (e) {}
+  }
+
+  /** Coarse 16x6 light/dark grid of the LEFT 55% of the strip, as hex.
+   *  Resolution is deliberately low: enough to tell names apart, not so
+   *  much that re-rendering the same card misses. */
+  function fingerprint(dataUrl) {
+    return new Promise(function (resolve) {
+      if (!dataUrl) return resolve(null);
+      var img = new Image();
+      img.onerror = function () { resolve(null); };
+      img.onload = function () {
+        try {
+          var GW = 16, GH = 6;
+          var c = document.createElement("canvas");
+          c.width = GW; c.height = GH;
+          var ctx = c.getContext("2d");
+          // left 55% only — the right side carries the changing date range
+          ctx.drawImage(img, 0, 0, Math.max(1, Math.floor(img.width * 0.55)), img.height,
+                             0, 0, GW, GH);
+          var px = ctx.getImageData(0, 0, GW, GH).data;
+          var vals = [], i;
+          for (i = 0; i < GW * GH; i++) {
+            vals.push((px[i * 4] * 0.299 + px[i * 4 + 1] * 0.587 + px[i * 4 + 2] * 0.114));
+          }
+          var mean = vals.reduce(function (a, b) { return a + b; }, 0) / vals.length;
+          var bits = vals.map(function (v) { return v < mean ? "1" : "0"; }).join("");
+          var hex = "";
+          for (i = 0; i < bits.length; i += 4) {
+            hex += parseInt(bits.substr(i, 4).padEnd(4, "0"), 2).toString(16);
+          }
+          resolve(hex);
+        } catch (e) { resolve(null); }
+      };
+      img.src = dataUrl;
+    });
+  }
+
+  function differingBits(a, b) {
+    if (!a || !b || a.length !== b.length) return 999;
+    var n = 0;
+    for (var i = 0; i < a.length; i++) {
+      var x = parseInt(a[i], 16) ^ parseInt(b[i], 16);
+      while (x) { n += x & 1; x >>= 1; }
+    }
+    return n;
+  }
+
+  /** Allow a little noise, but stay well short of telling two people apart.
+   *  96 bits total; 6 is ~6% drift. */
+  var TOLERANCE = 6;
+
+  function bestKnownMatch(fp, known) {
+    if (!fp) return null;
+    if (known[fp]) return known[fp];
+    var bestName = null, bestD = TOLERANCE + 1;
+    Object.keys(known).forEach(function (k) {
+      var d = differingBits(fp, k);
+      if (d < bestD) { bestD = d; bestName = known[k]; }
+    });
+    return bestD <= TOLERANCE ? bestName : null;
+  }
+
+  /* ── apply remembered names once the list is on screen ── */
+
+  async function applyMemory() {
+    if (typeof pendingSheets === "undefined" || !pendingSheets.length) return;
+    var known = recall();
+    if (!Object.keys(known).length) return addBulkConfirm(0);
+
+    var hits = 0;
+    for (var i = 0; i < pendingSheets.length; i++) {
+      var sh = pendingSheets[i];
+      sh._fp = await fingerprint(sh.strip);
+      var name = bestKnownMatch(sh._fp, known);
+      if (!name) continue;
+
+      var sel = document.querySelectorAll(".assign-sel")[i];
+      var cb  = document.querySelectorAll(".assign-ok")[i];
+      if (!sel || !cb) continue;
+
+      var matched = false;
+      for (var o = 0; o < sel.options.length; o++) {
+        if (sel.options[o].text.toLowerCase() === String(name).toLowerCase()) {
+          sel.selectedIndex = o; matched = true; break;
+        }
+      }
+      if (!matched) continue;
+
+      sh.suggested = name;
+      sh.confirmed = true;
+      sh.fromMemory = true;
+      cb.checked = true;
+      sel.style.borderColor = "var(--rule-strong)";
+      hits++;
+    }
+    addBulkConfirm(hits);
+  }
+
+  /* ── one button instead of one tick per card ── */
+
+  function addBulkConfirm(hits) {
+    var box = document.getElementById("assign-list");
+    if (!box || document.getElementById("assign-bulk")) return;
+
+    var total = pendingSheets.length;
+    var left  = total - hits;
+
+    var bar = document.createElement("div");
+    bar.id = "assign-bulk";
+    bar.style.cssText = "margin:12px 0 2px;display:flex;gap:12px;align-items:center;flex-wrap:wrap";
+
+    var msg = hits
+      ? hits + " of " + total + " matched from last time" +
+        (left ? " — check the remaining " + left + "." : " — nothing to check.")
+      : "First time through: check each printed name against the person selected. " +
+        "They'll be remembered after this.";
+
+    bar.innerHTML =
+      '<span style="font-size:13.5px;color:' + (hits ? "var(--ok)" : "var(--slate)") + '">' +
+        msg.replace(/&/g, "&amp;").replace(/</g, "&lt;") + '</span>' +
+      (left
+        ? '<button type="button" class="ghost" id="assign-all" style="padding:5px 12px;font-size:13px">' +
+          'Tick the remaining ' + left + '</button>'
+        : "");
+
+    box.parentNode.insertBefore(bar, box.nextSibling);
+
+    var all = document.getElementById("assign-all");
+    if (all) all.addEventListener("click", function () {
+      document.querySelectorAll(".assign-ok").forEach(function (cb, i) {
+        var sel = document.querySelectorAll(".assign-sel")[i];
+        if (!sel || !sel.value) return;          // never tick one with nobody chosen
+        cb.checked = true;
+        sel.style.borderColor = "var(--rule-strong)";
+        if (pendingSheets[i]) pendingSheets[i].confirmed = true;
+      });
+      var stillBlank = [];
+      document.querySelectorAll(".assign-sel").forEach(function (s, i) {
+        if (!s.value) stillBlank.push(i + 1);
+      });
+      if (stillBlank.length && typeof say === "function") {
+        say("Still need a person chosen for card " + stillBlank.join(", ") + ".", true);
+      }
+    });
+  }
+
+  /* ── learn from what the human confirmed ── */
+
+  function learn() {
+    if (typeof pendingSheets === "undefined") return;
+    var known = recall();
+    var sels = document.querySelectorAll(".assign-sel");
+    var names = document.querySelectorAll(".assign-name");
+    pendingSheets.forEach(function (sh, i) {
+      var n = (sels[i] && sels[i].value) ||
+              (names[i] && names[i].value && names[i].value.trim());
+      if (!n || !sh._fp) return;
+      known[sh._fp] = n;
+    });
+    // keep it from growing without bound — plenty for a few offices
+    var keys = Object.keys(known);
+    if (keys.length > 400) {
+      var trimmed = {};
+      keys.slice(-400).forEach(function (k) { trimmed[k] = known[k]; });
+      known = trimmed;
+    }
+    remember(known);
+  }
+
+  /* ── wire it up without touching the existing code ── */
+
+  if (typeof showAssign === "function") {
+    var original = showAssign;
+    showAssign = function () {
+      var r = original.apply(this, arguments);
+      var bar = document.getElementById("assign-bulk");
+      if (bar && bar.parentNode) bar.parentNode.removeChild(bar);
+      setTimeout(function () { applyMemory(); }, 0);
+      return r;
+    };
+  }
+
+  var done = document.getElementById("assign-done");
+  if (done) done.addEventListener("click", learn);   // runs alongside the existing handler
+})();
+
 </script>
 </body>
 </html>
