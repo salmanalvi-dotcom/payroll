@@ -160,7 +160,7 @@
     </select>
     <input class="office num" id="period" placeholder="05/10–05/22" style="border:1px solid var(--rule-strong);border-radius:3px;padding:7px 10px;width:130px">
     <span id="sync" style="font-size:13px;color:var(--slate)"></span>
-    <span id="build" style="font-family:var(--mono);font-size:11.5px;color:var(--slate);opacity:.75" title="which build of this page is live">b7 · 2026-10-15</span>
+    <span id="build" style="font-family:var(--mono);font-size:11.5px;color:var(--slate);opacity:.75" title="which build of this page is live">b8 · 2026-10-15</span>
     <div class="head-sp"></div>
     <button class="ghost" id="reset">Start over</button>
     <button class="ghost" id="signout">Sign out</button>
@@ -190,7 +190,7 @@
     </div>
 
     <div id="assign" class="hide" style="margin-top:16px;border:1px solid var(--flag);background:var(--flag-bg);border-radius:4px;padding:16px">
-      <div style="font-weight:600;margin-bottom:4px">Confirm who each timecard belongs to <span style="font-family:var(--mono);font-size:11.5px;font-weight:400;color:var(--slate)">[b7 · 2026-10-15]</span></div>
+      <div style="font-weight:600;margin-bottom:4px">Confirm who each timecard belongs to <span style="font-family:var(--mono);font-size:11.5px;font-weight:400;color:var(--slate)">[b8 · 2026-10-15]</span></div>
       <p style="color:var(--slate);font-size:13.5px;margin-bottom:12px">The name shown is read off the timecard itself. Check it matches the person selected, then confirm. Suggestions are only guesses until you confirm them.</p>
       <div id="assign-list"></div>
       <button class="primary" id="assign-done" style="margin-top:14px">These are right — continue</button>
@@ -273,7 +273,7 @@
         <div class="fld"><label for="n-office">Office / entity</label><select id="n-office"></select></div>
         <div class="fld"><label for="n-role">Job title</label><input id="n-role" placeholder="Dental Hygienist"></div>
         <div class="fld"><label for="n-status">Status</label><select id="n-status"><option>Full time</option><option>Part time</option><option>PRN</option></select></div>
-        <div class="fld"><label for="n-type">Paid as</label><select id="n-type"><option>Hourly</option><option>Salary</option></select></div>
+        <div class="fld"><label for="n-type">Paid as</label><select id="n-type"><option>Hourly</option><option>Salary</option><option>Contractor (1099)</option></select></div>
         <div class="fld"><label for="n-rate">Rate</label><input id="n-rate" class="num" placeholder="26.00"></div>
         <div class="fld"><label for="n-ot">Overtime rate</label><input id="n-ot" class="num" placeholder="39.00"></div>
         <div class="fld"><label for="n-start">First day</label><input id="n-start" class="num" placeholder="09/29/26"></div>
@@ -1974,6 +1974,18 @@
   var notes = {}, lastOutcome = "";
   function note(emp, txt){ if (!emp || !txt) return; (notes[emp] = notes[emp] || []).push(txt); }
 
+  /** Someone paid outside Paychex. Their hours still matter — they still get
+   *  paid — but they must never land in the figures keyed into Paychex. */
+  function isContractor(name){
+    var key = lower(name);
+    for (var i = 0; i < (staff || []).length; i++){
+      if (lower(staff[i].name) === key){
+        return /1099|contract/i.test(String(staff[i].type || ""));
+      }
+    }
+    return false;
+  }
+
   function renderTotals(){
     var R = rules(), t = totals();
     otherHrs = {};
@@ -1991,6 +2003,7 @@
     html += '<th class="n">Regular</th><th class="n">Overtime</th><th class="n">Holiday</th>' +
       '<th class="n">Vacation / PTO</th><th class="n">Other</th><th>Notes</th></tr></thead><tbody>';
     var gt = 0, gto = 0, gother = 0, ghol = 0, gvac = 0;
+    var ct = 0, cto = 0, chol = 0, cvac = 0, cnames = [];
     names.forEach(function(n){
       var e = t[n], ot = 0, isOt = false;
       var cells = "";
@@ -2006,17 +2019,29 @@
       var worked = roundHrs(e.total, R.round);
       var other = otherHrs[n] ? otherHrs[n].total : 0;
       var reg = worked - ot;
-      gt += reg; gto += ot; gother += other; ghol += holH; gvac += vacH;
       var by = (otherHrs[n] && otherHrs[n].by) || {};
       var holH = by["Holiday"] || 0;
       var vacH = (by["Vacation"] || 0) + (by["PTO"] || 0);
+      // holH and vacH used to be added to the running totals on the line
+      // ABOVE their own declarations, so the Holiday and Vacation columns
+      // of the "All staff" row were NaN every time.
+      var con = isContractor(n);
+      if (con){
+        ct += reg; cto += ot; chol += holH; cvac += vacH;
+      } else {
+        gt += reg; gto += ot; gother += other; ghol += holH; gvac += vacH;
+      }
       var restParts = [];
       Object.keys(by).forEach(function(k){
         if (k === "Holiday" || k === "Vacation" || k === "PTO") return;
         restParts.push(by[k].toFixed(2) + " " + k.toLowerCase());
       });
       var olabel = restParts.length ? restParts.join("<br>") : "—";
-      html += '<tr class="'+(isOt?"ot":"")+'"><td>'+esc(n)+'</td>'+cells+
+      if (con) cnames.push(n);
+      html += '<tr class="'+(isOt?"ot":"")+'"><td>'+esc(n)+
+        (con ? ' <span style="font-size:11.5px;font-weight:600;color:var(--flag);'+
+               'border:1px solid var(--flag);border-radius:3px;padding:1px 5px;white-space:nowrap">'+
+               '1099 — not Paychex</span>' : '')+'</td>'+cells+
         '<td class="n">'+reg.toFixed(2)+'</td>'+
         '<td class="n">'+(ot ? ot.toFixed(2) : "—")+'</td>'+
         '<td class="n">'+(holH ? holH.toFixed(2) : "—")+'</td>'+
