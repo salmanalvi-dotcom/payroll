@@ -160,7 +160,7 @@
     </select>
     <input class="office num" id="period" placeholder="05/10–05/22" style="border:1px solid var(--rule-strong);border-radius:3px;padding:7px 10px;width:130px">
     <span id="sync" style="font-size:13px;color:var(--slate)"></span>
-    <span id="build" style="font-family:var(--mono);font-size:11.5px;color:var(--slate);opacity:.75" title="which build of this page is live">b4 · 2026-10-15</span>
+    <span id="build" style="font-family:var(--mono);font-size:11.5px;color:var(--slate);opacity:.75" title="which build of this page is live">b6 · 2026-10-15</span>
     <div class="head-sp"></div>
     <button class="ghost" id="reset">Start over</button>
     <button class="ghost" id="signout">Sign out</button>
@@ -190,7 +190,7 @@
     </div>
 
     <div id="assign" class="hide" style="margin-top:16px;border:1px solid var(--flag);background:var(--flag-bg);border-radius:4px;padding:16px">
-      <div style="font-weight:600;margin-bottom:4px">Confirm who each timecard belongs to <span style="font-family:var(--mono);font-size:11.5px;font-weight:400;color:var(--slate)">[b4 · 2026-10-15]</span></div>
+      <div style="font-weight:600;margin-bottom:4px">Confirm who each timecard belongs to <span style="font-family:var(--mono);font-size:11.5px;font-weight:400;color:var(--slate)">[b6 · 2026-10-15]</span></div>
       <p style="color:var(--slate);font-size:13.5px;margin-bottom:12px">The name shown is read off the timecard itself. Check it matches the person selected, then confirm. Suggestions are only guesses until you confirm them.</p>
       <div id="assign-list"></div>
       <button class="primary" id="assign-done" style="margin-top:14px">These are right — continue</button>
@@ -620,24 +620,103 @@
     } catch(e){ return Promise.resolve(""); }
   }
 
-  function readPdf(f){
-    if (typeof pdfjsLib === "undefined"){
-      say("Couldn't load the PDF reader. Check your connection and reload, or paste the rows in the box above.", true);
-      return;
+  /* This clock paints the employee name, the column headings and the totals
+     as tiling PATTERNS wrapping a small bitmap — not as text. pdf.js 3.11
+     silently draws nothing for them, which is why the name strip came out
+     blank and why no amount of text parsing could ever find a name. 4.x
+     paints them. Measured on Henderson 09.27 10.11.pdf, name region:
+     3.11.174 -> 0 dark pixels, 4.7.76 -> 668. */
+  var PDF_VER = "4.7.76";
+  var PDFLIB = null;
+  async function loadPdfLib(){
+    if (PDFLIB) return PDFLIB;
+    try {
+      var m = await import("https://cdn.jsdelivr.net/npm/pdfjs-dist@" + PDF_VER + "/build/pdf.min.mjs");
+      m.GlobalWorkerOptions.workerSrc =
+        "https://cdn.jsdelivr.net/npm/pdfjs-dist@" + PDF_VER + "/build/pdf.worker.min.mjs";
+      PDFLIB = m;
+      return m;
+    } catch (err){
+      if (typeof pdfjsLib !== "undefined"){      // fall back to the old build
+        try { pdfjsLib.GlobalWorkerOptions.workerSrc =
+          "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"; } catch(e){}
+        PDFLIB = pdfjsLib;
+        return pdfjsLib;
+      }
+      return null;
     }
+  }
+
+  /** The band above the table, rendered large. OCR wants pixels; the name is
+   *  a crisp bitmap, so this reads at ~200ms a page and gets it exactly. */
+  function renderOcrBand(page){
+    try {
+      var vp = page.getViewport({ scale: 1 });
+      var full = page.getViewport({ scale: Math.min(3.2, 1100 / vp.width) });
+      var top = Math.round(full.height * 0.03), h = Math.round(full.height * 0.09);
+      var c = document.createElement("canvas");
+      c.width = Math.round(full.width); c.height = h;
+      var ctx = c.getContext("2d");
+      ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, c.width, c.height);
+      ctx.translate(0, -top);
+      return page.render({ canvasContext: ctx, viewport: full }).promise
+        .then(function(){ return c; }).catch(function(){ return null; });
+    } catch(e){ return Promise.resolve(null); }
+  }
+
+  function loadTesseract(){
+    if (window.Tesseract) return Promise.resolve(window.Tesseract);
+    return new Promise(function(resolve){
+      var el = document.createElement("script");
+      el.src = "https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js";
+      el.onload  = function(){ resolve(window.Tesseract || null); };
+      el.onerror = function(){ resolve(null); };
+      document.head.appendChild(el);
+    });
+  }
+
+  /** Last resort, and on this clock the only one that works: the name is
+   *  painted as a bitmap, so read it the way a person would. Anything that
+   *  fails here just leaves the card for the human, as before. */
+  async function ocrPending(){
+    var need = pendingSheets.filter(function(s){ return s.ocrCanvas && !s.ocrText; });
+    if (!need.length) return;
+    var T = await loadTesseract();
+    if (!T){ need.forEach(function(s){ s.ocrCanvas = null; }); return; }
+    var worker = null;
+    try {
+      say("Reading the names off the cards\u2026");
+      worker = await T.createWorker("eng");
+      for (var i = 0; i < need.length; i++){
+        say("Reading the names off the cards\u2026 " + (i + 1) + " of " + need.length);
+        try {
+          var r = await worker.recognize(need[i].ocrCanvas);
+          need[i].ocrText = ((r && r.data && r.data.text) || "").replace(/\s+/g, " ").trim();
+        } catch(e){ need[i].ocrText = ""; }
+        need[i].ocrCanvas = null;
+      }
+      say("");
+    } catch(e){ say(""); }
+    try { if (worker) await worker.terminate(); } catch(e){}
+    showAssign();
+  }
+
+  function readPdf(f){
     say("Reading " + f.name + "…");
     var fr = new FileReader();
     fr.onerror = function(){ say("Couldn't open " + f.name + ".", true); };
-    fr.onload = function(e){
-      try {
-        pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
-      } catch(err){}
-      pdfjsLib.getDocument({ data: e.target.result }).promise.then(function(pdf){
+    fr.onload = async function(e){
+      var LIB = await loadPdfLib();
+      if (!LIB){
+        say("Couldn't load the PDF reader. Check your connection and reload, or paste the rows in the box above.", true);
+        return;
+      }
+      LIB.getDocument({ data: e.target.result }).promise.then(function(pdf){
         var jobs = [];
         for (var p = 1; p <= pdf.numPages; p++){
           jobs.push(pdf.getPage(p).then(function(pg){
-            return Promise.all([pg.getTextContent(), renderNameStrip(pg)])
-              .then(function(both){ return { text: both[0], strip: both[1] }; });
+            return Promise.all([pg.getTextContent(), renderNameStrip(pg), renderOcrBand(pg)])
+              .then(function(a){ return { text: a[0], strip: a[1], ocr: a[2] }; });
           }));
         }
         Promise.all(jobs).then(function(pages){
@@ -660,6 +739,8 @@
             pendingSheets.push({
               sig: sig,
               headerText: parsed.header || "",
+              ocrCanvas: pageData.ocr || null,
+              ocrText: "",
               strip: pageData.strip || "",
               file: f.name,
               fromMultiPage: pages.length > 1,
@@ -678,6 +759,7 @@
           }
           say(pendingSheets.length + (pendingSheets.length === 1 ? " timecard read." : " timecards read."));
           showAssign();
+          ocrPending();
         }).catch(function(err){ say("Couldn't read the pages in " + f.name + ". " + err, true); });
       }).catch(function(err){ say("Couldn't open " + f.name + " as a PDF. " + err, true); });
     };
@@ -744,6 +826,12 @@
     if (!norm(headerText)) return "";
     var h  = " " + lower(headerText).replace(/[^a-z0-9]+/g, " ") + " ";
     var hz = lower(headerText).replace(/[^a-z]/g, "");
+    var words = h.trim().split(/\s+/);
+    var near = function(a, b){
+      if (a === b) return true;
+      if (a.length < 4 || b.length < 4) return false;
+      return a.indexOf(b) > -1 || b.indexOf(a) > -1;
+    };
     var hit = (roster || []).filter(function(n){
       var w = lower(n).replace(/[^a-z]+/g, " ").split(/\s+/)
         .filter(function(x){ return x.length > 1; });
@@ -751,6 +839,9 @@
       var first = w[0], last = w[w.length - 1];
       if (h.indexOf(" " + first + " ") > -1 && h.indexOf(" " + last + " ") > -1) return true;
       if (hz.indexOf(first + last) > -1 || hz.indexOf(last + first) > -1) return true;
+      // the clock and the roster don't always agree on the given name
+      // ("Sonya Ford" on the card, "LaSonya D Ford" on the books)
+      if (h.indexOf(" " + last + " ") > -1 && words.some(function(x){ return near(x, first); })) return true;
       return Math.max(first.length, last.length) >= 4 &&
              hz.indexOf(first) > -1 && hz.indexOf(last) > -1;
     });
@@ -772,11 +863,18 @@
     // it's the clock saying whose card this is. Both names present as whole
     // words is not a guess, so it ticks itself.
     pendingSheets.forEach(function(sh){
-      if (!norm(sh.headerText)) return;
-      var hit = nameFromHeader(sh.headerText, roster);
-      if (hit){ sh.suggested = hit; sh.fromHeader = true; sh.confirmed = true; return; }
+      var src = norm(sh.headerText) || norm(sh.ocrText);
+      if (!src) return;
+      var hit = nameFromHeader(src, roster);
+      if (hit){
+        sh.suggested = hit;
+        sh.fromHeader = !!norm(sh.headerText);
+        sh.fromOcr = !norm(sh.headerText);
+        sh.confirmed = true;
+        return;
+      }
       if (!sh.suggested){
-        var loose = matchRoster(sh.headerText, roster);
+        var loose = matchRoster(src, roster);
         if (loose){ sh.suggested = loose; sh.guessed = true; }
       }
     });
@@ -797,16 +895,18 @@
           ? '<img src="'+sh.strip+'" alt="top of this timecard" ' +
             'style="display:block;max-width:100%;height:auto;border:1px solid var(--rule);border-radius:3px;background:#fff;margin-bottom:6px">'
           : '<div style="font-size:13px;color:var(--alert);margin-bottom:8px">Couldn\'t show the top of this timecard — check the punches below carefully.</div>')+
-        (norm(sh.headerText)
+        ((norm(sh.headerText) || norm(sh.ocrText))
           ? '<div style="font-family:var(--mono);font-size:12px;color:var(--slate);margin-bottom:8px;' +
-            'white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="'+esc(sh.headerText)+'">'+
-            'read off the card: '+esc(sh.headerText.slice(0,140))+'</div>'
-          : '<div style="font-size:12.5px;color:var(--alert);margin-bottom:8px">'+
-            'No text in this card\'s header — the name is probably drawn, not typed.</div>')+
+            'white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="'+esc(norm(sh.headerText)||norm(sh.ocrText))+'">'+
+            (norm(sh.headerText) ? 'read off the card: ' : 'read from the picture: ')+
+            esc((norm(sh.headerText)||norm(sh.ocrText)).slice(0,140))+'</div>'
+          : '<div style="font-size:12.5px;color:var(--slate);margin-bottom:8px">'+
+            'Still reading this card\u2026</div>')+
         '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">'+
           '<label style="display:flex;align-items:center;gap:7px;font-size:14px;font-weight:500">'+
             '<input type="checkbox" class="assign-ok" data-i="'+i+'"'+(sh.confirmed ? " checked" : "")+'> matches</label>'+
-          (sh.fromHeader ? '<span style="font-size:12.5px;color:var(--ok)">named itself</span>' : '')+
+          (sh.fromHeader ? '<span style="font-size:12.5px;color:var(--ok)">named itself</span>'
+           : sh.fromOcr ? '<span style="font-size:12.5px;color:var(--ok)">read off the card</span>' : '')+
           '<select data-i="'+i+'" class="assign-sel" style="border:1px solid '+(sh.confirmed ? "var(--rule-strong)" : "var(--flag)")+';border-radius:3px;padding:8px 10px;min-width:210px;font-weight:500">'+opts+'</select>'+
           '<input class="assign-name'+(roster.length ? " hide" : "")+'" data-i="'+i+'" placeholder="Type the name" value="'+esc(sh.suggested||"")+'" style="border:1px solid var(--rule-strong);border-radius:3px;padding:8px 10px">'+
           '<span style="font-family:var(--mono);font-size:12.5px;color:var(--slate);flex:1 1 220px">'+esc(sh.preview)+'</span>'+
