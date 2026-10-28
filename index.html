@@ -160,7 +160,7 @@
     </select>
     <input class="office num" id="period" placeholder="05/10–05/22" style="border:1px solid var(--rule-strong);border-radius:3px;padding:7px 10px;width:130px">
     <span id="sync" style="font-size:13px;color:var(--slate)"></span>
-    <span id="build" style="font-family:var(--mono);font-size:11.5px;color:var(--slate);opacity:.75" title="which build of this page is live">b8 · 2026-10-15</span>
+    <span id="build" style="font-family:var(--mono);font-size:11.5px;color:var(--slate);opacity:.75" title="which build of this page is live">b11 · 2026-10-30</span>
     <div class="head-sp"></div>
     <button class="ghost" id="reset">Start over</button>
     <button class="ghost" id="signout">Sign out</button>
@@ -171,6 +171,7 @@
 
   <div id="hire-alert" class="hide" style="max-width:1080px;margin:20px auto -8px;padding:0 20px"></div>
   <div id="period-warn" class="hide" style="max-width:1080px;margin:20px auto -8px;padding:0 20px"></div>
+  <div id="sanity-warn" class="hide" style="max-width:1080px;margin:20px auto -8px;padding:0 20px"></div>
   <div id="submit-banner" class="hide" style="max-width:1080px;margin:20px auto -8px;padding:0 20px"></div>
 
   <section class="step hide" id="s-offices">
@@ -190,7 +191,7 @@
     </div>
 
     <div id="assign" class="hide" style="margin-top:16px;border:1px solid var(--flag);background:var(--flag-bg);border-radius:4px;padding:16px">
-      <div style="font-weight:600;margin-bottom:4px">Confirm who each timecard belongs to <span style="font-family:var(--mono);font-size:11.5px;font-weight:400;color:var(--slate)">[b8 · 2026-10-15]</span></div>
+      <div style="font-weight:600;margin-bottom:4px">Confirm who each timecard belongs to <span style="font-family:var(--mono);font-size:11.5px;font-weight:400;color:var(--slate)">[b11 · 2026-10-30]</span></div>
       <p style="color:var(--slate);font-size:13.5px;margin-bottom:12px">The name shown is read off the timecard itself. Check it matches the person selected, then confirm. Suggestions are only guesses until you confirm them.</p>
       <div id="assign-list"></div>
       <button class="primary" id="assign-done" style="margin-top:14px">These are right — continue</button>
@@ -701,6 +702,94 @@
     showAssign();
   }
 
+  /* ─── Two practice systems, two completely different files ───────────
+     Fort Worth and Camp Bowie run Open Dental, which prints one TIME CARD
+     per person: full punch detail, but the employee's name is painted as a
+     bitmap, so it needs OCR.
+
+     Arlington runs Dentrix, whose PAYROLL REPORT is the opposite: names,
+     employee IDs and hours all as real text — nothing to OCR, nothing to
+     confirm — but TOTALS ONLY. There are no punches in it, so none of the
+     review questions can be asked from it.
+
+     Feeding one into the other's parser is how a file ends up as rows with
+     no real name on them. So the file is identified first, and the manager
+     is told which kind it is and what that means. */
+
+  function looksLikeDentrixPayroll(text){
+    return /payroll\s*report/i.test(text) &&
+           /employee\s*name/i.test(text) &&
+           /\bid\s*#/i.test(text);
+  }
+
+  /** Lines read: "Valles, Xitlali(Lali) LV22 0:00 0.00 0.00 0.00" */
+  function parseDentrixPayroll(text){
+    var re = /([A-Za-z][A-Za-z'\-]+)\s*,\s*([A-Za-z][A-Za-z'\-]*)\s*(?:\(([^)]*)\))?\s+([A-Za-z]{1,4}\d{1,5})\s+(\d{1,3}):([0-5]\d)\b/g;
+    var out = [], m;
+    while ((m = re.exec(text)) !== null){
+      var mins = parseInt(m[5], 10) * 60 + parseInt(m[6], 10);
+      out.push({
+        name: m[2] + " " + m[1],
+        alias: m[3] ? m[3].trim() : "",
+        id: m[4],
+        mins: mins
+      });
+    }
+    return out;
+  }
+
+  /** Period end, read off the label, so a totals-only row has a date that
+   *  lands inside the period rather than today. */
+  function periodEndDate(){
+    var b = (typeof periodBounds === "function") ? periodBounds() : null;
+    return b ? b.end : new Date();
+  }
+
+  function loadDentrixPayroll(list, fileName){
+    var off = $("#office").value;
+    var end = periodEndDate();
+    var added = [], skipped = [];
+    list.forEach(function(p, i){
+      if (!p.mins){ skipped.push(p.name); return; }
+      added.push({
+        emp: p.name,
+        date: new Date(end.getTime()),
+        day: DAYS[end.getDay()],
+        inT: null, outT: null,          // renders as "(adjustment)" — there is no punch
+        mins: p.mins,
+        key: p.name + "|dentrix|" + i,
+        office: off,
+        unlabeled: false, unreadable: false,
+        note: "total for the period from the Dentrix payroll report" +
+              (p.id ? " (ID " + p.id + ")" : "") +
+              (p.alias ? " \u2014 also shown as " + p.alias : "")
+      });
+    });
+    if (!added.length){
+      say("That looks like a Dentrix payroll report, but no hours were listed in it.", true);
+      return;
+    }
+    rows = rows.concat(added);
+    pendingSheets = [];
+    var box = $("#assign"); if (box) box.classList.add("hide");
+    say(added.length + " people loaded from the Dentrix payroll report." +
+        (skipped.length ? " " + skipped.length + " with no hours were left out." : ""));
+    var warn = $("#period-warn");
+    if (warn){
+      warn.innerHTML =
+        '<div style="border:1px solid var(--flag);background:var(--flag-bg);border-radius:4px;padding:14px 16px">'+
+          '<div style="font-weight:600">This is a Dentrix payroll report \u2014 totals only</div>'+
+          '<div style="margin-top:5px;font-size:14px">It gives each person\u2019s name, ID and total '+
+            'hours, and nothing else. There are no clock-in and clock-out times in it, so the usual '+
+            'questions about late finishes, breaks and overtime can\u2019t be asked from this file.</div>'+
+          '<div style="margin-top:4px;font-size:13.5px;color:var(--slate)">If you need those, export '+
+            'the time card detail from Dentrix instead and upload that.</div>'+
+        '</div>';
+      warn.classList.remove("hide");
+    }
+    build();
+  }
+
   function readPdf(f){
     say("Reading " + f.name + "…");
     var fr = new FileReader();
@@ -720,6 +809,18 @@
           }));
         }
         Promise.all(jobs).then(function(pages){
+          // identify the file before parsing it as something it isn't
+          var allText = pages.map(function(pd){
+            return (pd.text && pd.text.items ? pd.text.items.map(function(it){ return it.str; }).join(" ") : "");
+          }).join(" \n ");
+
+          if (looksLikeDentrixPayroll(allText)){
+            var dx = parseDentrixPayroll(allText);
+            if (dx.length){ loadDentrixPayroll(dx, f.name); return; }
+            say("That looks like a Dentrix payroll report, but no employee rows could be read from it.", true);
+            return;
+          }
+
           var guess = guessName(f.name);
           var got = 0;
           pages.forEach(function(pageData, i){
@@ -2399,7 +2500,12 @@
       var ts = $("#totals-sub");
       if (ts) ts.textContent = "Straight from the timecards. Check anything that looks wrong before you finish.";
     }
-    if (me.period && !$("#period").value) $("#period").value = me.period;
+    // The server's period is wrong in two ways (see computePeriodLabel).
+    // Use the calculated one; fall back to the server's only if that fails.
+    var computed = "";
+    try { computed = computePeriodLabel(new Date()); } catch(e){}
+    if (!$("#period").value) $("#period").value = computed || me.period || "";
+    else if (computed && me.period && $("#period").value === me.period) $("#period").value = computed;
     if (me.status) periodStatus = me.status;
     if (me.name) $("#sync").textContent = me.name + (IS_OWNER ? "" : " · " + (OFFICES[me.office]||""));
     DB = true;
@@ -2522,6 +2628,35 @@
      The label looks like 09.27.26-10.10.26. Punches that fall outside it
      are the single most expensive mistake this app can make, so they get
      said out loud rather than filed quietly. */
+  /* ─── The pay period, worked out here instead of on the server ──────
+     Code.gs computes this with a noon anchor and a Monday-payday model,
+     and gets it wrong twice over: a morning submission slips a whole
+     period, and the boundaries are a day out besides. The real calendar,
+     off the Paychex pack for 09/27-10/10: periods run SUNDAY to SATURDAY
+     and the cheque lands the Friday six days after the period ends.
+
+     The server's value is only a suggestion — whatever this field holds
+     is what putSheet files under. So it is computed here, which means
+     the fix ships with this file alone and needs no Apps Script edit.
+     period-fix.gs is still the proper fix; this makes it non-urgent. */
+  var PERIOD_END_ANCHOR = [2026, 10, 10];        // a Saturday that ends a period
+
+  function addDays(d, n){ var o = new Date(d.getTime()); o.setDate(o.getDate() + n); return o; }
+  function daysBetween(a, b){
+    return Math.round((Date.UTC(b.getFullYear(), b.getMonth(), b.getDate()) -
+                       Date.UTC(a.getFullYear(), a.getMonth(), a.getDate())) / 86400000);
+  }
+  function pad2(n){ return (n < 10 ? "0" : "") + n; }
+  function fmtPeriod(d){
+    return pad2(d.getMonth() + 1) + "." + pad2(d.getDate()) + "." + String(d.getFullYear()).slice(2);
+  }
+  /** The last period to have ENDED on or before today — the one being submitted. */
+  function computePeriodLabel(now){
+    var anchor = new Date(PERIOD_END_ANCHOR[0], PERIOD_END_ANCHOR[1] - 1, PERIOD_END_ANCHOR[2]);
+    var end = addDays(anchor, Math.floor(daysBetween(anchor, now || new Date()) / 14) * 14);
+    return fmtPeriod(addDays(end, -13)) + "-" + fmtPeriod(end);
+  }
+
   function periodBounds(){
     var m = /^(\d\d)\.(\d\d)\.(\d\d)-(\d\d)\.(\d\d)\.(\d\d)$/.exec(norm($("#period").value));
     if (!m) return null;
@@ -2554,6 +2689,87 @@
       '</div>';
     box.classList.remove("hide");
     return out.length;
+  }
+
+  /* ─── Is this really one person? ─────────────────────────────────
+     When a card's name can't be read, somebody types one in — "All",
+     "ARLINGTON TEAM" — and a whole office's punches land on a single
+     invented employee. It has happened twice. It is also trivially
+     detectable: one person cannot be clocked in twice at once.
+
+     On the Arlington batch of 26 Oct, eight of the nine days had this
+     person overlapping themselves, one pair by ten hours, 157:20 in
+     total. Any one of those checks catches it. */
+
+  function sanityCheck(list){
+    var byDay = {}, byEmp = {};
+    (list || []).forEach(function(r){
+      if (!r.emp || !r.date) return;
+      byEmp[r.emp] = byEmp[r.emp] || { total: 0, days: {} };
+      if (r.mins) byEmp[r.emp].total += r.mins;
+      var dk = r.emp + "\u0000" + dstr(r.date);
+      byEmp[r.emp].days[dstr(r.date)] = (byEmp[r.emp].days[dstr(r.date)] || 0) + (r.mins || 0);
+      if (r.inT == null || r.outT == null) return;
+      (byDay[dk] = byDay[dk] || []).push(r);
+    });
+
+    var overlaps = {};
+    Object.keys(byDay).forEach(function(dk){
+      var emp = dk.split("\u0000")[0], L = byDay[dk];
+      for (var a = 0; a < L.length; a++){
+        for (var b = a + 1; b < L.length; b++){
+          var st = Math.max(L[a].inT, L[b].inT), en = Math.min(L[a].outT, L[b].outT);
+          if (en > st){
+            overlaps[emp] = overlaps[emp] || { days: {}, worst: 0 };
+            overlaps[emp].days[dk.split("\u0000")[1]] = true;
+            overlaps[emp].worst = Math.max(overlaps[emp].worst, en - st);
+          }
+        }
+      }
+    });
+
+    var out = [];
+    Object.keys(byEmp).forEach(function(emp){
+      var e = byEmp[emp], why = [];
+      var ov = overlaps[emp];
+      if (ov){
+        var n = Object.keys(ov.days).length;
+        why.push("clocked in twice at once on " + n + (n === 1 ? " day" : " days") +
+                 " (overlapping by up to " + fmtHM(ov.worst) + ")");
+      }
+      var longest = 0, longDay = "";
+      Object.keys(e.days).forEach(function(d){
+        if (e.days[d] > longest){ longest = e.days[d]; longDay = d; }
+      });
+      if (longest > 16 * 60) why.push(fmtHM(longest) + " on a single day (" + longDay + ")");
+      if (e.total > 110 * 60) why.push(fmtHM(e.total) + " in one period");
+      if (why.length) out.push({ emp: emp, why: why, total: e.total });
+    });
+    return out;
+  }
+
+  function renderSanity(list){
+    var box = $("#sanity-warn");
+    if (!box) return 0;
+    var bad = sanityCheck(list);
+    if (!bad.length){ box.classList.add("hide"); box.innerHTML = ""; return 0; }
+    box.innerHTML =
+      '<div style="border:1px solid var(--alert);background:var(--alert-bg);border-radius:4px;padding:14px 16px">'+
+        '<div style="font-weight:600;color:var(--alert)">'+
+          (bad.length === 1 ? 'One name doesn\u2019t look like one person'
+                            : bad.length + ' names don\u2019t look like one person') + '</div>'+
+        '<div style="margin-top:5px;font-size:14px">Nobody can be clocked in twice at the same '+
+          'time. This usually means one timecard\u2019s name was typed over a whole office\u2019s '+
+          'punches.</div>'+
+        bad.map(function(b){
+          return '<div style="margin-top:8px;font-size:14px"><b>'+esc(b.emp)+'</b> \u2014 '+
+                 esc(b.why.join("; "))+'</div>';
+        }).join("")+
+        '<div style="margin-top:8px;font-size:13.5px;color:var(--slate)">Go back to the upload step '+
+          'and give each timecard its own name before you finish.</div>'+
+      '</div>';
+    box.classList.remove("hide");
+    return bad.length;
   }
 
   function showSubmitted(res, office, list){
@@ -2602,6 +2818,7 @@
     } else { emptyPushOk[mine] = false; }
 
     checkPeriodFit(mineRows);
+    renderSanity(mineRows);
 
     try {
       var unresolved = flags.filter(function(f){
